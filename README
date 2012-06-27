@@ -1,0 +1,14 @@
+Installation:
+1. Go to 'lib/atlante/atlante' and type 'make'
+2. Go to 'api' and type 'make'
+
+To build AR.Drone proxy (you should have AR.Drone SDK installed):
+3. Go to 'proxies/ARDrone/Build'
+4. Edit 'Makefile' and change the SDK_PATH variable to point to your AR.Drone SDK installation
+
+To build the Pelican proxy:
+3. Go to 'poxies/Pelican/3rdparty' and type 'make'
+4. Go to 'proxies/Pelican/bin' and type 'make'
+
+To build the example application:
+3. Go to 'example/bin' and type 'make'

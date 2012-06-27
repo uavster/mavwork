@@ -1,0 +1,548 @@
+/*
+ * SpeedEstimator.cpp
+ *
+ *  Created on: 25/05/2012
+ *      Author: Ignacio Mellado-Bataller
+ */
+#include <iostream>
+#include "mav/pelican/SpeedEstimator.h"
+#include <cv.h>
+#include <highgui.h>
+#include "cam/FrameGrabber.h"
+#include "cam/IVideoSource.h"
+#include <stdlib.h>
+
+//#define CALIBRATE_CAMERA
+//#define LOCAL_DEBUG
+
+#define OPTFLOW_NUM_FEATURES					25
+#define OPTFLOW_FPS_ALTITUDE_FACTOR				1000 //(17*1.5)
+
+// The processed image size is the captured image size multiplied by this factor
+#define IMAGE_SCALING_ON
+#ifdef IMAGE_SCALING_ON
+#define IMAGE_SCALING_FACTOR					0.5
+#else
+#define IMAGE_SCALING_FACTOR					1.0
+#endif
+
+// Natural image dimensions of camera
+#define CAMERA_NATIVE_IMAGE_WIDTH				752
+#define CAMERA_NATIVE_IMAGE_HEIGHT				480
+
+// Image dimensions for the capture video mode
+#define CAPTURE_IMAGE_WIDTH						frameWidth 		// (CAMERA_NATIVE_IMAGE_WIDTH / 2)
+#define CAPTURE_IMAGE_HEIGHT					frameHeight 	//(CAMERA_NATIVE_IMAGE_HEIGHT / 2)
+
+// Dimensions of image for processing
+#define PROCESS_IMAGE_WIDTH						(CAPTURE_IMAGE_WIDTH * IMAGE_SCALING_FACTOR)
+#define PROCESS_IMAGE_HEIGHT					(CAPTURE_IMAGE_HEIGHT * IMAGE_SCALING_FACTOR)
+
+// Camera parameters must be calculated for the capture dimensions and they are scaled
+#define CAMERA_FOCAL_DISTANCE_X_PIXELS			(cameraModel.getFocalDistanceX() * IMAGE_SCALING_FACTOR)
+#define CAMERA_FOCAL_DISTANCE_Y_PIXELS			(cameraModel.getFocalDistanceY() * IMAGE_SCALING_FACTOR)
+#define CAMERA_CENTER_X_PIXELS					(cameraModel.getCenterX() * IMAGE_SCALING_FACTOR)
+#define CAMERA_CENTER_Y_PIXELS					(cameraModel.getCenterY() * IMAGE_SCALING_FACTOR)
+
+#define CAMERA_PIXEL_WIDTH_METERS				(6e-6 * CAMERA_NATIVE_IMAGE_WIDTH / PROCESS_IMAGE_WIDTH)
+#define CAMERA_PIXEL_HEIGHT_METERS				(6e-6 * CAMERA_NATIVE_IMAGE_HEIGHT / PROCESS_IMAGE_HEIGHT)
+
+#define US_SENSOR_DISTANCE_TO_IMU				0.165
+#define CAMERA_DISTANCE_TO_IMU					0.146
+#define CAMERA_TRANSFORM_FROM_DRONE_FRAME		HTMatrix4(RotMatrix3::identity(), Vector3(0, 0, CAMERA_DISTANCE_TO_IMU))
+
+namespace Mav {
+
+SpeedEstimator::SpeedEstimator()
+	: cvgThread("SpeedEstimator") {
+/*
+	srand(time(NULL));
+	RansacVector3 rv;
+	cvg_int numPoints = 25;
+	Vector3 set[numPoints];
+	Vector3 realVector = Vector3(1, 2, 3);
+	for (int i = 0; i < numPoints; i++) {
+		double noise = 0.2 * 2 * ((rand()/(double)RAND_MAX) - 0.5);
+		set[i] = realVector + Vector3(noise, noise, noise);
+	}
+	set[5] = set[5] * 2.1;
+	set[9] = set[9] * 0.6;
+	set[14] = set[14] * 1.5;
+	set[22] = set[22] * 2;
+	cvg_bool isInSet[numPoints];
+	Vector3 bestModel;
+	rv.compute(set, numPoints, bestModel, isInSet);
+	std::cout << "(" << bestModel.x << ", " << bestModel.y << ", " << bestModel.z << ")" << std::endl;
+	for (int i = 0; i < numPoints; i++) {
+		std::cout << (isInSet[i] ? "1" : "0") << " ";
+	}
+	std::cout << std::endl;
+	throw cvgException();
+*/
+	srand(time(NULL));
+	image = NULL;
+	doDebug = false;
+}
+
+void SpeedEstimator::open() {
+	close();
+	try {
+		desiredFramePeriod = 0.0f;
+#ifndef CALIBRATE_CAMERA
+		try {
+			cameraModel.loadModel("camera-model.txt");
+		} catch (cvgException &e) {
+		}
+#else
+		cameraModel.setMode(Video::CameraModel::CALIBRATION);
+#endif
+
+		start();
+	} catch (cvgException &e) {
+		close();
+		throw e;
+	}
+}
+
+void SpeedEstimator::close() {
+	stop();
+	optFlow.destroy();
+	if (image != NULL) { cvReleaseImageHeader(&image); image = NULL; }
+
+#ifdef CALIBRATE_CAMERA
+	cameraModel.saveModel("camera-model.txt");
+#endif
+}
+
+void SpeedEstimator::run() {
+	try {
+		if (getVideoFrame()) {
+
+			cvg_ulong curTime = frameTime;
+
+			if (image == NULL) {
+				CvSize size = cvSize(frameWidth, frameHeight);
+				image = cvCreateImageHeader(size, IPL_DEPTH_8U, 3);
+				if (image == NULL) throw cvgException("[SpeedEstimator] Cannot create image header");
+				scaledImage = cvCreateImage(cvSize(frameWidth * IMAGE_SCALING_FACTOR, frameHeight * IMAGE_SCALING_FACTOR), IPL_DEPTH_8U, 3);
+				if (scaledImage == NULL) throw cvgException("[SpeedEstimator] Cannot create image");
+				optFlow.create(size.width * IMAGE_SCALING_FACTOR, size.height * IMAGE_SCALING_FACTOR, OPTFLOW_NUM_FEATURES);
+			}
+
+			// Grab new frame
+			cvSetData(image, &frameBuffer, frameWidth * 3);
+
+	#ifdef CALIBRATE_CAMERA
+			cvShowImage("SpeedEstimator", cameraModel.run(image));
+			cvWaitKey(1);
+	#else
+			IplImage *calImage = cameraModel.run(image);
+
+			// Scale image
+#ifndef IMAGE_SCALING_ON
+			scaledImage = calImage;
+#else
+			cvResize(calImage, scaledImage);
+#endif
+
+			// Get drone euler angles and altitude for the current frames
+			cvg_double prevAltitude, curAltitude;
+			Vector3 prevEulerZYX, curEulerZYX;
+			if (!inputMutex.lock()) throw cvgException("[SpeedEstimator] Cannot lock mutex");
+			curAltitude = camAltitude + US_SENSOR_DISTANCE_TO_IMU;
+			curEulerZYX = camEulerZYX;
+			inputMutex.unlock();
+
+//std::cout << "Altitude: " << curAltitude << std::endl;
+			// Get drone euler angles and altitude for the last processed frame
+			prevAltitude = lastAltitude;
+			prevEulerZYX = lastEulerZYX;
+			// Store the current values for the next iteration
+			lastAltitude = curAltitude;
+			lastEulerZYX = curEulerZYX;
+
+			cvg_double elapsed = (cvg_double)(curTime - lastFrameTime) / frameTicksPerSecond;
+			lastFrameTime = curTime;
+
+			optFlow.enableDebug(doDebug, calImage);
+
+			// Get optical flow results
+			cvg_int numFeatures;
+			CvPoint2D32f *prevFeatures, *curFeatures;
+			char *foundFeatures;
+	//Vector3 avDisp;
+			// Run the optical flow algorithm
+//std::cout << scaledImage->width << ", " << scaledImage->height << std::endl;
+			if (elapsed > 0 && optFlow.process(scaledImage, &numFeatures, &prevFeatures, &foundFeatures, &curFeatures)) {
+
+				// Last image camera reference frame
+				RotMatrix3 rot = 	RotMatrix3(Vector3(1, 0, 0), M_PI) *
+									RotMatrix3(Vector3(0, 0, 1), prevEulerZYX.z * (M_PI / 180.0)) *
+									RotMatrix3(Vector3(0, 1, 0), prevEulerZYX.y * (M_PI / 180.0)) *
+									RotMatrix3(Vector3(1, 0, 0), prevEulerZYX.x * (M_PI / 180.0));
+				HTMatrix4 droneFromWorld = HTMatrix4(rot, Vector3(0, 0, prevAltitude));
+				HTMatrix4 prevCamFromWorld = droneFromWorld * CAMERA_TRANSFORM_FROM_DRONE_FRAME;
+				HTMatrix4 prevWorldFromCam = prevCamFromWorld.inverse();
+				Vector4 floorNormalFromCam4 = prevWorldFromCam * Vector4(0, 0, 1, 1);
+				Vector4 floorCenterFromCam4 = prevWorldFromCam * Vector4(0, 0, 0, 1);
+				Vector3 prevFloorNormalFromCam = Vector3(floorNormalFromCam4.x, floorNormalFromCam4.y, floorNormalFromCam4.z);
+				Vector3 prevFloorCenterFromCam = Vector3(floorCenterFromCam4.x, floorCenterFromCam4.y, floorCenterFromCam4.z);
+
+				// Current image camera reference frame
+				rot = 	RotMatrix3(Vector3(1, 0, 0), M_PI) *
+						RotMatrix3(Vector3(0, 0, 1), curEulerZYX.z * (M_PI / 180.0)) *
+						RotMatrix3(Vector3(0, 1, 0), curEulerZYX.y * (M_PI / 180.0)) *
+						RotMatrix3(Vector3(1, 0, 0), curEulerZYX.x * (M_PI / 180.0));
+				droneFromWorld = HTMatrix4(rot, Vector3(0, 0, curAltitude));
+				HTMatrix4 curCamFromWorld = droneFromWorld * CAMERA_TRANSFORM_FROM_DRONE_FRAME;
+				HTMatrix4 curWorldFromCam = curCamFromWorld.inverse();
+				floorNormalFromCam4 = curWorldFromCam * Vector4(0, 0, 1, 1);
+				floorCenterFromCam4 = curWorldFromCam * Vector4(0, 0, 0, 1);
+				Vector3 curFloorNormalFromCam = Vector3(floorNormalFromCam4.x, floorNormalFromCam4.y, floorNormalFromCam4.z);
+				Vector3 curFloorCenterFromCam = Vector3(floorCenterFromCam4.x, floorCenterFromCam4.y, floorCenterFromCam4.z);
+
+				// Reconstruct the point 3D coordinates assuming the floor is flat
+				Vector3 avSpeed;
+				cvg_int vectorCount = 0;
+				Vector3 dispVectors[numFeatures];
+				for (cvg_int i = 0; i < numFeatures; i++) {
+					if (foundFeatures[i] == 0) continue;
+					// 3D point of old feature position
+					Vector3 s = Vector3((prevFeatures[i].x - CAMERA_CENTER_X_PIXELS) * CAMERA_PIXEL_WIDTH_METERS,
+										(prevFeatures[i].y - CAMERA_CENTER_Y_PIXELS) * CAMERA_PIXEL_HEIGHT_METERS,
+										CAMERA_FOCAL_DISTANCE_X_PIXELS * CAMERA_PIXEL_WIDTH_METERS);
+					Vector4 prevPointOnFloorFromWorld4 = prevCamFromWorld * findLinePlaneIntersection(s.normalize(), prevFloorNormalFromCam, prevFloorCenterFromCam);
+					Vector3 prevPointOnFloorFromWorld = Vector3(prevPointOnFloorFromWorld4.x, prevPointOnFloorFromWorld4.y, prevPointOnFloorFromWorld4.z);
+
+					// 3D point of new feature position
+					s = Vector3((curFeatures[i].x - CAMERA_CENTER_X_PIXELS) * CAMERA_PIXEL_WIDTH_METERS,
+								(curFeatures[i].y - CAMERA_CENTER_Y_PIXELS) * CAMERA_PIXEL_HEIGHT_METERS,
+								CAMERA_FOCAL_DISTANCE_X_PIXELS * CAMERA_PIXEL_WIDTH_METERS);
+					Vector4 curPointOnFloorFromWorld4 = curCamFromWorld * findLinePlaneIntersection(s.normalize(), curFloorNormalFromCam, curFloorCenterFromCam);
+					Vector3 curPointOnFloorFromWorld = Vector3(curPointOnFloorFromWorld4.x, curPointOnFloorFromWorld4.y, curPointOnFloorFromWorld4.z);
+
+					Vector3 pointSpeedFromWorld = (prevPointOnFloorFromWorld - curPointOnFloorFromWorld);
+					dispVectors[vectorCount] = pointSpeedFromWorld;
+//					avSpeed += pointSpeedFromWorld;
+					vectorCount++;
+
+					//avDisp += Vector3(curFeatures[i].x - prevFeatures[i].x, curFeatures[i].y - prevFeatures[i].y);
+
+					if (doDebug) {
+						CvPoint p0, p1;
+						Vector4 prevP = curWorldFromCam * prevPointOnFloorFromWorld;
+						Vector4 curP = curWorldFromCam * curPointOnFloorFromWorld;
+						p0.x = (1.0 / IMAGE_SCALING_FACTOR) * (CAMERA_FOCAL_DISTANCE_X_PIXELS * prevP.x / prevP.z + CAMERA_CENTER_X_PIXELS);
+						p0.y = (1.0 / IMAGE_SCALING_FACTOR) * (CAMERA_FOCAL_DISTANCE_Y_PIXELS * prevP.y / prevP.z + CAMERA_CENTER_Y_PIXELS);
+						p1.x = (1.0 / IMAGE_SCALING_FACTOR) * (CAMERA_FOCAL_DISTANCE_X_PIXELS * curP.x / curP.z + CAMERA_CENTER_X_PIXELS);
+						p1.y = (1.0 / IMAGE_SCALING_FACTOR) * (CAMERA_FOCAL_DISTANCE_Y_PIXELS * curP.y / curP.z + CAMERA_CENTER_Y_PIXELS);
+						cvLine(calImage, p0, p1, CV_RGB(128, 128, 0), 1, CV_AA);
+						cvCircle(calImage, p0, 2, CV_RGB(128, 128, 0));
+					}
+				}
+
+	/*			RotMatrix3 rot = 	RotMatrix3(Vector3(1, 0, 0), M_PI) *
+									RotMatrix3(Vector3(0, 0, 1), curEulerZYX.z * (M_PI / 180.0)) *
+									RotMatrix3(Vector3(0, 1, 0), curEulerZYX.y * (M_PI / 180.0)) *
+									RotMatrix3(Vector3(1, 0, 0), curEulerZYX.x * (M_PI / 180.0));
+				HTMatrix4 droneFromWorld = HTMatrix4(rot, Vector3(0, 0, curAltitude));
+				HTMatrix4 camFromWorld = droneFromWorld * CAMERA_TRANSFORM_FROM_DRONE_FRAME;
+				HTMatrix4 worldFromCam = camFromWorld.inverse();
+				Vector4 floorNormalFromCam4 = worldFromCam * Vector4(1, 0, 0, 1);
+				Vector4 floorCenterFromCam4 = worldFromCam * Vector4(0, 0, 0, 1);
+				Vector3 floorNormalFromCam = Vector3(floorNormalFromCam4.x, floorNormalFromCam4.y, floorNormalFromCam4.z);
+				Vector3 floorCenterFromCam = Vector3(floorCenterFromCam4.x, floorCenterFromCam4.y, floorCenterFromCam4.z);
+				CvPoint q0, q1;
+				q0.x = (1.0 / IMAGE_SCALING_FACTOR) * (CAMERA_FOCAL_DISTANCE_X_PIXELS * floorCenterFromCam.x / floorCenterFromCam.z + CAMERA_CENTER_X_PIXELS);
+				q0.y = (1.0 / IMAGE_SCALING_FACTOR) * (CAMERA_FOCAL_DISTANCE_Y_PIXELS * floorCenterFromCam.y / floorCenterFromCam.z + CAMERA_CENTER_Y_PIXELS);
+				q1.x = (1.0 / IMAGE_SCALING_FACTOR) * (CAMERA_FOCAL_DISTANCE_X_PIXELS * (floorNormalFromCam.x) / (floorNormalFromCam.z) + CAMERA_CENTER_X_PIXELS);
+				q1.y = (1.0 / IMAGE_SCALING_FACTOR) * (CAMERA_FOCAL_DISTANCE_Y_PIXELS * (floorNormalFromCam.y) / (floorNormalFromCam.z) + CAMERA_CENTER_Y_PIXELS);
+				cvLine(calImage, q0, q1, CV_RGB(255, 255, 255), 1, CV_AA);
+	*/
+				if (vectorCount <= 0) {
+					if (!mutex.lock()) throw cvgException("[SpeedEstimator] Cannot lock mutex");
+					measureIsValid = false;
+					mutex.unlock();
+				} else {
+					Vector3 bestModel;
+					cvg_bool isInlier[vectorCount];
+					cvg_bool newSpeedSample = ransac.compute(dispVectors, vectorCount, bestModel, isInlier);
+
+					if (!newSpeedSample) {
+						if (!mutex.lock()) throw cvgException("[SpeedEstimator] Cannot lock mutex");
+						measureIsValid = false;
+						mutex.unlock();
+					} else {
+	//					Vector3 csfw = (avSpeed / vectorCount) / elapsed;
+						Vector3 csfw = bestModel / elapsed;
+
+						HTMatrix4 flatDroneFromWorld = HTMatrix4(
+															RotMatrix3(Vector3(1, 0, 0), M_PI) *
+															RotMatrix3(Vector3(0, 0, 1), curEulerZYX.z * (M_PI / 180.0)),
+															Vector3(0, 0, -curAltitude)
+															);
+						HTMatrix4 worldFromFlatDrone = flatDroneFromWorld.inverse();
+						Vector4 dsfyw0 = worldFromFlatDrone * Vector3();
+						Vector4 dsfyw = worldFromFlatDrone * csfw;
+						dsfyw = dsfyw - dsfyw0;
+
+						Vector4 csfc4 = curWorldFromCam * csfw;
+						Vector4 wfc0 = curWorldFromCam * Vector3();
+						csfc4.x -= wfc0.x; csfc4.y -= wfc0.y; csfc4.z -= wfc0.z;
+
+						if (!mutex.lock()) throw cvgException("[SpeedEstimator] Cannot lock mutex");
+						measureIsValid = true;
+						cameraSpeedFromWorld = Vector3(csfw.x, csfw.y, csfw.z);
+						camSpeedFromCam = Vector3(csfc4.x, csfc4.y, csfc4.z);
+						droneSpeedFromYawedWorld = Vector3(dsfyw.x, dsfyw.y, dsfyw.z);
+						mutex.unlock();
+
+						if (doDebug) {
+							CvPoint p0, p1;
+							p0.x = (1.0 / IMAGE_SCALING_FACTOR) * CAMERA_CENTER_X_PIXELS;
+							p0.y = (1.0 / IMAGE_SCALING_FACTOR) * CAMERA_CENTER_Y_PIXELS;
+							p1.x = (1.0 / IMAGE_SCALING_FACTOR) * (100 * csfc4.x + CAMERA_CENTER_X_PIXELS);
+							p1.y = (1.0 / IMAGE_SCALING_FACTOR) * (100 * csfc4.y + CAMERA_CENTER_Y_PIXELS);
+							cvLine(calImage, p0, p1, CV_RGB(200, 200, 0), 2, CV_AA);
+							cvCircle(calImage, p0, 4, CV_RGB(200, 200, 0));
+
+			/*				p0.x = CAMERA_CENTER_X_PIXELS;
+							p0.y = CAMERA_CENTER_Y_PIXELS;
+							avDisp = curAltitude * (((avDisp / vectorCount)/elapsed) / CAMERA_FOCAL_DISTANCE_X_PIXELS);
+							p1.x = CAMERA_CENTER_X_PIXELS + 100 * avDisp.x;
+							p1.y = CAMERA_CENTER_Y_PIXELS + 100 * avDisp.y;
+							cvLine(calImage, p0, p1, CV_RGB(0, 0, 255), 2, CV_AA);
+			*/
+							Vector4 q0 = curWorldFromCam * Vector3();
+							Vector4 qx = curWorldFromCam * Vector3(0.1, 0, 0);
+							Vector4 qy = curWorldFromCam * Vector3(0, 0.1, 0);
+							Vector4 qz = curWorldFromCam * Vector3(0, 0, 0.1);
+							p0.x = (1.0 / IMAGE_SCALING_FACTOR) * (CAMERA_FOCAL_DISTANCE_X_PIXELS * q0.x / q0.z + CAMERA_CENTER_X_PIXELS);
+							p0.y = (1.0 / IMAGE_SCALING_FACTOR) * (CAMERA_FOCAL_DISTANCE_Y_PIXELS * q0.y / q0.z + CAMERA_CENTER_Y_PIXELS);
+							p1.x = (1.0 / IMAGE_SCALING_FACTOR) * (CAMERA_FOCAL_DISTANCE_X_PIXELS * qx.x / qx.z + CAMERA_CENTER_X_PIXELS);
+							p1.y = (1.0 / IMAGE_SCALING_FACTOR) * (CAMERA_FOCAL_DISTANCE_Y_PIXELS * qx.y / qx.z + CAMERA_CENTER_Y_PIXELS);
+							cvLine(calImage, p0, p1, CV_RGB(255, 0, 0), 2, CV_AA);
+							p1.x = (1.0 / IMAGE_SCALING_FACTOR) * (CAMERA_FOCAL_DISTANCE_X_PIXELS * qy.x / qy.z + CAMERA_CENTER_X_PIXELS);
+							p1.y = (1.0 / IMAGE_SCALING_FACTOR) * (CAMERA_FOCAL_DISTANCE_Y_PIXELS * qy.y / qy.z + CAMERA_CENTER_Y_PIXELS);
+							cvLine(calImage, p0, p1, CV_RGB(0, 255, 0), 2, CV_AA);
+							p1.x = (1.0 / IMAGE_SCALING_FACTOR) * (CAMERA_FOCAL_DISTANCE_X_PIXELS * qz.x / qz.z + CAMERA_CENTER_X_PIXELS);
+							p1.y = (1.0 / IMAGE_SCALING_FACTOR) * (CAMERA_FOCAL_DISTANCE_Y_PIXELS * qz.y / qz.z + CAMERA_CENTER_Y_PIXELS);
+							cvLine(calImage, p0, p1, CV_RGB(0, 0, 255), 2, CV_AA);
+
+						}
+					}
+				}
+
+				notifyEvent(Video::GotVideoFrameEvent(calImage->imageData, calImage->width, calImage->height, calImage->width * calImage->height * 3, 0, frameTime, frameTicksPerSecond));
+#ifdef LOCAL_DEBUG
+				cvShowImage("SpeedEstimator", calImage);
+				cvWaitKey(1);
+#endif
+			}
+	#endif
+		}
+	} catch (cvgException &e) {
+		std::cout << e.getMessage() << std::endl;
+	}
+}
+
+void SpeedEstimator::updateCamera(cvg_double altitude, const Vector3 &eulerZYX) {
+	if (!inputMutex.lock()) throw cvgException("[SpeedEstimator] Cannot lock mutex");
+	camAltitude = altitude;
+	camEulerZYX = eulerZYX;
+	inputMutex.unlock();
+	desiredFramePeriod = altitude / OPTFLOW_FPS_ALTITUDE_FACTOR;
+}
+
+Vector3 SpeedEstimator::getSpeedInWorldFrame(cvg_bool *isValid) {
+	if (!mutex.lock()) throw cvgException("[SpeedEstimator] Cannot lock mutex");
+	Vector3 speed = cameraSpeedFromWorld;
+	if (isValid != NULL) (*isValid) =  measureIsValid;
+	mutex.unlock();
+	return speed;
+}
+
+Vector3 SpeedEstimator::getSpeedInCamFrame(cvg_bool *isValid) {
+	if (!mutex.lock()) throw cvgException("[SpeedEstimator] Cannot lock mutex");
+	Vector3 speed = camSpeedFromCam;
+	if (isValid != NULL) (*isValid) =  measureIsValid;
+	mutex.unlock();
+	return speed;
+}
+
+Vector3 SpeedEstimator::getSpeedInPseudoWorldFrame(cvg_bool *isValid) {
+	if (!mutex.lock()) throw cvgException("[SpeedEstimator] Cannot lock mutex");
+	Vector3 speed = droneSpeedFromYawedWorld;
+	if (isValid != NULL) (*isValid) =  measureIsValid;
+	mutex.unlock();
+	return speed;
+}
+
+Vector3 SpeedEstimator::findLinePlaneIntersection(const Vector3 &lineVector, const Vector3 &planeNormal, const Vector3 &planeCenter) {
+	double lambda = (planeCenter * planeNormal) / (lineVector * planeNormal);
+	return lambda * lineVector;
+}
+
+void SpeedEstimator::enableDebug(cvg_bool e) {
+#ifdef LOCAL_DEBUG
+	if (!doDebug && e) {
+		cvNamedWindow("SpeedEstimator");
+	} else if (doDebug && !e) {
+		cvDestroyWindow("SpeedEstimator");
+	}
+#endif
+	doDebug = e;
+}
+
+void SpeedEstimator::gotEvent(EventGenerator &source, const Event &e) {
+	const Video::GotVideoFrameEvent *vfe = dynamic_cast<const Video::GotVideoFrameEvent *>(&e);
+	if (vfe == NULL) return;
+
+	cvg_double elapsed = frameDividerTimer.getElapsedSeconds();
+	if (elapsed < desiredFramePeriod) return;
+//std::cout << "SpeedEstimator FPS: " << (1.0 / elapsed) << " (" << (1.0 / desiredFramePeriod) << ")" << std::endl;
+	frameDividerTimer.restart();
+
+	if (!frameMutex.lock()) throw cvgException("[SpeedEstimator] Cannot lock frame mutex");
+	frameBuffer2.copy(vfe->frameData, vfe->frameLength);
+	frameWidth2 = vfe->width;
+	frameHeight2 = vfe->height;
+	frameTime2 = vfe->timestamp;
+	frameTicksPerSecond2 = vfe->ticksPerSecond;
+	frameCondition.signal();
+	frameMutex.unlock();
+}
+
+cvg_bool SpeedEstimator::getVideoFrame() {
+	if (!frameMutex.lock()) throw cvgException("[SpeedEstimator] Cannot lock frame mutex");
+	cvg_bool result = frameCondition.wait(&frameMutex, 0.25);
+	if (result) {
+		frameBuffer = frameBuffer2;
+		frameWidth = frameWidth2;
+		frameHeight = frameHeight2;
+		frameTime = frameTime2;
+		frameTicksPerSecond = frameTicksPerSecond2;
+
+static cvgTimer debugTime;
+static cvg_int debugAcum = 0;
+debugAcum++;
+std::cout << "SpeedEstimator fps: " << (debugAcum / debugTime.getElapsedSeconds()) << std::endl;
+
+	}
+	frameMutex.unlock();
+	return result;
+}
+
+Vector3 SpeedEstimator::RansacVector3::modelFromSamples(Vector3 *totalSampleSet, cvg_int numSamplesInSet, cvg_bool *isSampleInSubset) {
+	Vector3 mean;
+	cvg_int count = 0;
+	for (cvg_int i = 0; i < numSamplesInSet; i++)
+		if (isSampleInSubset[i]) {
+			mean += totalSampleSet[i];
+			count++;
+		}
+	return mean / count;
+}
+
+void SpeedEstimator::RansacVector3::generateSubset(Vector3 *sampleSet, cvg_int numSamplesInSet, cvg_int subsetLength, cvg_bool *isInSubset) {
+	if (subsetLength >= numSamplesInSet) {
+		for (cvg_int i = 0; i < numSamplesInSet; i++) sampleSet[i] = true;
+		return;
+	}
+	bzero(isInSubset, numSamplesInSet * sizeof(cvg_bool));
+	cvg_int nonSelectedSamples = numSamplesInSet;
+	for (cvg_int i = 0; i < subsetLength; i++) {
+		cvg_int chosenIndex = (nonSelectedSamples - 1) * (rand() / (cvg_float)RAND_MAX);
+		cvg_int j = 0, elemCount = 0;
+		while(j < numSamplesInSet) {
+			if (!isInSubset[j]) {
+				if (elemCount == chosenIndex) {
+					isInSubset[j] = true;
+					break;
+				}
+				elemCount++;
+			}
+			j++;
+		}
+		nonSelectedSamples--;
+	}
+}
+
+cvg_bool SpeedEstimator::RansacVector3::isInlier(const Vector3 &point, const Vector3 &model) {
+	cvg_double p_mod = point.modulus();
+	cvg_double m_mod = model.modulus();
+	cvg_bool angleCriterion = (point * model) / (p_mod * m_mod) > cos(30.0 * M_PI / 180.0);
+	cvg_bool modulusCriterion = (fabs(m_mod - p_mod) / m_mod) < 10.0;
+	return angleCriterion && modulusCriterion;
+}
+
+cvg_float SpeedEstimator::RansacVector3::inlierFitness(const Vector3 &point, const Vector3 &model) {
+	cvg_double p_mod = point.modulus();
+	cvg_double m_mod = model.modulus();
+	cvg_float angleCriterion = (point * model) / (p_mod * m_mod);
+	cvg_float modulusCriterion = 1.0 - fabs(m_mod - p_mod) / m_mod;
+	if (angleCriterion < 0.0f || modulusCriterion < 0.0f) return 0.0;
+	else return angleCriterion * modulusCriterion;
+}
+
+cvg_float SpeedEstimator::RansacVector3::modelFitness(Vector3 *set, cvg_int numSamplesInSet, cvg_bool *subset, const Vector3 &model) {
+	cvg_float fitness = 0.0f;
+	cvg_int count = 0;
+	for (cvg_int i = 0; i < numSamplesInSet; i++) {
+		if (subset[i]) {
+			fitness += inlierFitness(set[i], model);
+			count++;
+		}
+	}
+	return fitness / count;
+}
+
+cvg_int SpeedEstimator::RansacVector3::testOutliersWithSubModel(Vector3 *set, cvg_int numSamplesInSet, Vector3 subModel, cvg_bool *outputInliers) {
+	cvg_int numInliers = 0;
+	for (cvg_int i = 0; i < numSamplesInSet; i++) {
+		if (!outputInliers[i] && isInlier(set[i], subModel)) {
+			numInliers++;
+			outputInliers[i] = true;
+		}
+	}
+	return numInliers;
+}
+
+cvg_bool SpeedEstimator::RansacVector3::compute(Vector3 *sampleSet, cvg_int numSamplesInSet, Vector3 &bestModel, cvg_bool *isInlier) {
+	cvg_double p = 0.99;
+	cvg_double epsilon = 0.5;
+	cvg_double sRatio = 0.35;
+	cvg_int s = numSamplesInSet * sRatio;
+	cvg_int minInliersToConsiderModel = numSamplesInSet * 0.6;
+	cvg_int N = log(1 - p) / log(1 - pow(1 - epsilon, s));
+
+	cvg_bool subset[numSamplesInSet];
+	cvg_float bestModelFitness = -1.0f;
+	for (cvg_int i = 0; i < N; i++) {
+		// Generate initial group
+		generateSubset(sampleSet, numSamplesInSet, s, subset);
+		Vector3 subModel = modelFromSamples(sampleSet, numSamplesInSet, subset);
+
+		// Test potential outliers against submodel and add those that fit well
+		cvg_int totalInliers = testOutliersWithSubModel(sampleSet, numSamplesInSet, subModel, subset);
+//std::cout << "model: (" << subModel.x << ", " << subModel.y << ", " << subModel.z << ") -> " << totalInliers << std::endl;
+		if (totalInliers >= minInliersToConsiderModel) {
+			// The model is good; check its performance
+			cvg_float curModelFitness = modelFitness(sampleSet, numSamplesInSet, subset, subModel);
+			if (curModelFitness > bestModelFitness) {
+				bestModelFitness = curModelFitness;
+				bestModel = subModel;
+				minInliersToConsiderModel = totalInliers;	// Maximize consensus (test with and without this)
+				memcpy(isInlier, subset, numSamplesInSet * sizeof(cvg_bool));
+
+				// TODO: Think about it (outside if??)
+				epsilon = 1 - (totalInliers / numSamplesInSet);
+				N = log(1 - p) / log(1 - pow(1 - epsilon, s));
+			}
+		}
+	}
+
+	return bestModelFitness > 0.0f;
+}
+
+}

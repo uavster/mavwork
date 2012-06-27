@@ -1,0 +1,161 @@
+#include <qextserialport.h>
+#include "mav/pelican/serial/serialcom.h"
+#include "mav/pelican/serial/packets.h"
+#include <atlante.h>
+#include <stdio.h>
+
+namespace Mav {
+namespace Pelican {
+
+//Posix_QextSerialPort *serialPort;	// NACHO (It doesn't compile with this type and later it's equaled to a QextSerialPort)
+QextSerialPort *serialPort = NULL;			// NACHO
+PortSettings portSettings;
+
+
+long timevaldiff(struct timeval *starttime, struct timeval *finishtime)
+{
+  long msec;
+  msec=(finishtime->tv_sec-starttime->tv_sec)*1000;
+  msec+=(finishtime->tv_usec-starttime->tv_usec)/1000;
+  return msec;
+}
+
+
+bool initserial(const char *port, BaudType baud, BitsType databits, ParityTyp parity,StopBits stopbits, FlowTyp flowcontrol,double timeoutSeconds)
+{
+  //select baud rate
+  switch(baud){
+  case BAUD_9600: portSettings.BaudRate = BAUD9600;break;
+//  case BAUD_14400: portSettings.BaudRate = BAUD14400;break;	// NACHO (This is Windows only)
+  case BAUD_19200: portSettings.BaudRate = BAUD19200;break;
+  case BAUD_38400: portSettings.BaudRate = BAUD38400;break;
+//  case BAUD_56000: portSettings.BaudRate = BAUD56000;break;	// NACHO (This is Windows only)
+  case BAUD_57600: portSettings.BaudRate = BAUD57600;break;
+  case BAUD_115200: portSettings.BaudRate = BAUD115200;break;
+  default:
+	  return false;	// NACHO
+  }
+
+  //setup databits
+  switch(databits){
+  case DATA5: portSettings.DataBits = DATA_5;break;
+  case DATA6: portSettings.DataBits = DATA_6;break;
+  case DATA7: portSettings.DataBits = DATA_7;break;
+  case DATA8: portSettings.DataBits = DATA_8;break;
+  default:
+	  return false;	// NACHO
+  }
+
+  //setup parity
+  switch(parity){
+  case P_NONE: portSettings.Parity = PAR_NONE ;break;
+  case P_ODD:  portSettings.Parity = PAR_ODD  ;break;
+  case P_EVEN: portSettings.Parity = PAR_EVEN ;break;
+//  case P_MARK: portSettings.Parity = PAR_MARK ;break;		// NACHO (PAR_MARK is Windows only)
+  default:
+	  return false;	// NACHO
+  }
+   
+  //setup flow control
+  switch(flowcontrol){
+  case FLOWOFF: portSettings.FlowControl = FLOW_OFF; break;
+  case FLOWHARDWARE: portSettings.FlowControl = FLOW_HARDWARE ;break;
+  case FLOWXONXOFF: portSettings.FlowControl = FLOW_XONXOFF ;break;
+  default:
+	  return false;	// NACHO
+  }
+  //setup stops bits
+  switch(stopbits){
+  case STOP1:   portSettings.StopBits = STOP_1; break;
+//  case STOP1_5: portSettings.StopBits = STOP_1_5;break;	// NACHO (1.5 stop bits is Windows only)
+  case STOP2:   portSettings.StopBits = STOP_2;break;
+  default:
+	  return false;	// NACHO
+  }
+  
+  //setup timeout
+  portSettings.Timeout_Millisec = timeoutSeconds * 1000;		// NACHO
+//  portSettings.Timeout_Millisec = timeout_msec;	// NACHO
+//  portSettings.Timeout_Sec = timeout_sec;	// NACHO
+  //open serial port
+  serialPort  = new QextSerialPort(port, portSettings);
+  if (serialPort == NULL) throw cvgException("[Pelican_serialcom] Error creating QextSerialPort object");
+
+  //define settings to the port.
+  if (!serialPort->open(QextSerialPort::ReadWrite)) 
+    {
+//      printf("Error: cannot open serial port \n");	// NACHO
+	  closeserial();	// NACHO
+      return false;
+    }
+  return true;
+}
+
+bool closeserial()
+{
+	// NACHO
+	if (serialPort != NULL) {
+		serialPort->close();
+		delete serialPort;
+		serialPort = NULL;
+	}
+
+	return true;
+}
+
+
+
+bool readData(char *data, int len) {
+    int i = 0;
+#if (READ_TIMEOUT > 0)
+    timeval startTime, endTime;
+    gettimeofday(&startTime, NULL);
+#endif
+    while(i < len) {
+#if (READ_TIMEOUT > 0)
+        gettimeofday(&endTime, NULL);
+        if (timevaldiff(&startTime, &endTime) > READ_TIMEOUT) break;
+#endif
+        int read = serialPort->read(&data[i], len - i);
+
+        if (read > 0) {
+            i += read;
+        }
+        if (i < len) usleep(10);
+    }
+    return i >= len;
+}
+
+bool writeData(char *data, int len) {
+        int i = 0;
+#if (WRITE_TIMEOUT > 0)
+        timeval startTime, endTime;
+        gettimeofday(&startTime, NULL);
+#endif
+        while(i < len) {
+#if (WRITE_TIMEOUT > 0)
+            gettimeofday(&endTime, NULL);
+            if (timevaldiff(&startTime, &endTime) > WRITE_TIMEOUT) break;
+#endif
+            int written = serialPort->write(data, len - i);
+
+            if (written > 0)
+                i += written;
+            if (i < len) usleep(10);
+        }
+        return i >= len;
+}
+
+bool flush_port()
+{
+	serialPort->flush();
+	usleep(100);
+	return 1;
+}
+
+unsigned short ntohUShort(unsigned short s) {
+    return (unsigned short)(((unsigned int)((char *)&s)[0] << 8) | (unsigned int)(((char *)&s)[1]));
+}
+
+}
+}

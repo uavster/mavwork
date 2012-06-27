@@ -1,0 +1,326 @@
+#include <iostream>
+
+#include "cam/camueye/CamUeye_driver.h"
+#include <atlante.h>
+
+#define HAVE_NEW_API
+//#define LIMIT_FPS_SOFT
+
+#define CAM_W 352
+#define CAM_H 288
+#define CAM_X (752-CAM_W)/2
+#define CAM_Y (480-CAM_H)/2
+
+#define CAM_FPS 30.0
+#define CAM_EXP 20.0
+
+/* ******* ******* *******/
+/* uEye CAMERA FUNCTIONS */
+/* ******* ******* *******/
+
+namespace Video {
+
+#ifdef HAVE_NEW_API
+
+IDSEXP is_SetExposureTime(HIDS hf, double exposure, double *newExp) {
+	IDSEXP res = is_Exposure(hf, IS_EXPOSURE_CMD_SET_EXPOSURE, &exposure, sizeof(double));
+	is_Exposure(hf, IS_EXPOSURE_CMD_GET_EXPOSURE, newExp, sizeof(double));
+	return res;
+}
+
+IDSEXP is_SetAOI(HIDS hCam, INT type, INT *pXPos, INT *pYPos, INT *pWidth, INT *pHeight) {
+	IDSEXP res;
+	if (type == IS_GET_IMAGE_AOI) {
+		IS_RECT rect;
+		res = is_AOI(hCam, IS_AOI_IMAGE_GET_AOI, &rect, sizeof(IS_RECT));
+		if (res == IS_SUCCESS) {
+			*pXPos = rect.s32X; *pYPos = rect.s32Y; *pWidth = rect.s32Width; *pHeight = rect.s32Height;
+		}
+	} else if (type == IS_SET_IMAGE_AOI) {
+		IS_RECT rect;
+		rect.s32X = *pXPos; rect.s32Y = *pYPos;
+		rect.s32Width = *pWidth; rect.s32Height = *pHeight;
+		res = is_AOI(hCam, IS_AOI_IMAGE_SET_AOI, &rect, sizeof(IS_RECT));
+	}
+	return res;
+}
+
+#endif
+
+CamUeye_driver::CamUeye_driver(int w, int h, int x, int y,
+                 double framesPerSec, double ExposureMode) {
+
+  hCam = (HIDS)1;
+  
+  width = w;
+  height = h;
+  x_off = x;
+  y_off = y;
+  
+  setFps = framesPerSec;
+  setExposureMode = ExposureMode;
+  debug = 0; //by defualt no debug mode
+
+	
+}
+
+CamUeye_driver::CamUeye_driver() {
+	width = -1;
+	hCam = (HIDS)1;
+	debug = 0;
+}
+
+CamUeye_driver::~CamUeye_driver() {
+  stopCam();
+}
+
+
+
+//camera setup
+bool CamUeye_driver::startCam() {
+
+	// Initialize camera
+	if (is_InitCamera(&hCam, NULL) != IS_SUCCESS) {
+		throw cvgException("[CamUeye_driver] Camera initialization failed");
+	}
+
+/*	SENSORINFO info;
+	is_GetSensorInfo(hCam, &info);
+	std::cout << "Sensor name: " << info.strSensorName << std::endl;
+	std::cout << "Max. width: " << info.nMaxWidth << std::endl;
+	std::cout << "Max. height: " << info.nMaxHeight << std::endl;
+
+	UINT numEntries;
+	is_ImageFormat(hCam, IMGFRMT_CMD_GET_NUM_ENTRIES, &numEntries, sizeof(UINT));
+	int listSize = sizeof(IMAGE_FORMAT_LIST) + (numEntries - 1) * sizeof(IMAGE_FORMAT_INFO);
+	char *listBuffer = new char[listSize];
+	IMAGE_FORMAT_LIST list;
+	list.nNumListElements = numEntries;
+	list.nSizeOfListEntry = sizeof(IMAGE_FORMAT_INFO);
+	is_ImageFormat(hCam, IMGFRMT_CMD_GET_LIST, &list, listSize);
+	for (unsigned int i = 0; i < list.nNumListElements; i++) {
+		IMAGE_FORMAT_INFO *info = &((IMAGE_FORMAT_INFO *)&list.FormatInfo[0])[i];
+		std::cout << "ID: " << info->nFormatID << ", width: " << info->nWidth << ", height: " << info->nHeight << ", x0: " << info->nX0 << ", y0: " << info->nY0 << std::endl;
+	}
+	delete [] listBuffer;
+*/
+	// Check if a config file exists and use it
+	if (width < 0) {
+		if (is_LoadParameters(hCam, "camera.ini") != IS_SUCCESS) {
+			throw cvgException("Error loading camera config file");
+		}
+	} else {
+		//set color mode
+		//    if (is_SetColorMode(hCam, IS_CM_BGR8_PACKED) != IS_SUCCESS)
+		if (is_SetColorMode(hCam, IS_CM_BGR8_PACKED) != IS_SUCCESS)
+		  throw cvgException("[CamUeye_driver] is_SetColorMode() failed");
+
+		UINT format = 16; // (352x288)
+		if (is_ImageFormat(hCam, IMGFRMT_CMD_SET_FORMAT, &format, sizeof(UINT)) != IS_SUCCESS)
+			throw cvgException("[CamUeye_driver] is_ImageFormat() failed");
+
+		x_off = (752-352) / 2; y_off = (480-288) / 2;
+		width = 352; height = 288;
+		if (is_SetAOI(hCam, IS_SET_IMAGE_AOI, &x_off, &y_off, &width, &height) != IS_SUCCESS)
+		  throw cvgException("[CamUeye_driver] is_SetAOI() failed");
+
+		//set frames per second
+		if (is_SetFrameRate(hCam, setFps, &fps) != IS_SUCCESS)
+		  throw cvgException("[CamUeye_driver] is_SetFrameRate() failed");
+
+		//set exposure mode
+		setExposureMode = 0.5;
+		if (is_SetExposureTime(hCam, setExposureMode, &exposure) != IS_SUCCESS)
+			throw cvgException("[CamUeye_driver] is_SetExposureTime() failed");
+
+		double val1 = 1.0, val2 = 0.0;
+		if (is_SetAutoParameter(hCam, IS_SET_ENABLE_AUTO_GAIN, &val1, &val2) != IS_SUCCESS)
+			throw cvgException("[CamUeye_driver] is_SetAutoParameter() failed");
+
+		if (is_SetAutoParameter(hCam, IS_SET_ENABLE_AUTO_SHUTTER, &val1, &val2) != IS_SUCCESS)
+			throw cvgException("[CamUeye_driver] is_SetAutoParameter() failed");
+
+		val1 = 0.0;
+		if (is_SetAutoParameter(hCam, IS_SET_ENABLE_AUTO_WHITEBALANCE, &val1, &val2) != IS_SUCCESS)
+			throw cvgException("[CamUeye_driver] is_SetAutoParameter() failed");
+
+	}
+
+	bpp = CalcBitsPerPixel(is_SetColorMode(hCam, IS_GET_COLOR_MODE));
+
+	if (is_ClearSequence(hCam) != IS_SUCCESS)
+		throw cvgException("[CamUeye_driver] is_ClearSequence() failed");
+
+	if (!getImageSize(&width, &height))
+		throw cvgException("[CamUeye_driver] Cannot get image size");
+
+	for (int i = 0; i < NUM_BUFFERS; i++) {
+		if (is_AllocImageMem(hCam, width, height, bpp, &imgBuffer[i], &imgBufferId[i]) != IS_SUCCESS)
+			throw cvgException(cvgString("[CamUeye_driver] is_AllocImageMem() failed") + imgBuffer[i]);
+		if (is_AddToSequence(hCam, imgBuffer[i], imgBufferId[i]) != IS_SUCCESS)
+			throw cvgException(cvgString("[CamUeye_driver] is_AddToSequence() failed on ") + imgBufferId[i]);
+	}
+
+	if (is_InitImageQueue(hCam, 0) != IS_SUCCESS)
+		throw cvgException("[CamUeye_driver] is_InitImageQueue() failed");
+
+	return true;
+}
+
+//stop and closes the camera
+bool CamUeye_driver::stopCam() {
+	stopLive();
+
+	is_ClearSequence(hCam);
+	for (int i = 0; i < NUM_BUFFERS; i++)
+		is_FreeImageMem(hCam, imgBuffer[i], imgBufferId[i]);
+	is_ExitCamera(hCam);
+
+	return true;
+}
+
+// single frame capture mode
+bool CamUeye_driver::snapshot() {
+	return is_FreezeVideo(hCam, IS_WAIT) == IS_SUCCESS;
+}
+
+// continuos mode
+bool CamUeye_driver::startLive() {
+	return is_CaptureVideo(hCam, IS_DONT_WAIT) == IS_SUCCESS;
+}
+
+void CamUeye_driver::stopLive() {
+  is_StopLiveVideo(hCam, IS_FORCE_VIDEO_STOP);
+  for (int i = 0; i < NUM_BUFFERS; i++)
+	  is_UnlockSeqBuf(hCam, IS_IGNORE_PARAMETER, imgBuffer[i]);
+}
+
+
+
+bool CamUeye_driver::GetImage(char *image, cvg_ulong *timestamp) {
+#ifdef LIMIT_FPS_SOFT
+	cvg_double elapsed = limitTimer.getElapsedSeconds();
+	cvg_double period = 1.0 / setFps;
+	if (elapsed < period) {
+		usleep(0.25 * (1e6 * (period - elapsed)));
+		return false;
+	} else limitTimer.restart();
+#endif
+	char *pLast = NULL;
+	INT lastId = 0;
+	if (is_WaitForNextImage(hCam, 250, &pLast, &lastId) != IS_SUCCESS) return false;
+
+	// Lock the buffer
+	if (is_LockSeqBuf(hCam, lastId, pLast) != IS_SUCCESS) return false;
+	// Copy the buffer to the provided one
+	memcpy(image, pLast, 3 * width * height);
+	// Get frame timestamp if needed
+	if (timestamp != NULL) {
+		UEYEIMAGEINFO info;
+		is_GetImageInfo(hCam, lastId, &info, sizeof(UEYEIMAGEINFO));
+		(*timestamp) = info.u64TimestampDevice;
+	}
+	// Unlock the buffer
+	is_UnlockSeqBuf(hCam, lastId, pLast);
+
+	return true;
+
+/*	INT msg; //value returned by acquisition
+	INT dummy = 0;
+	char *pLast=NULL, *pMem = NULL; //memory address of the buffer
+
+	//the image memory that was last used for capturing
+	// an image
+	msg = is_GetActSeqBuf (hCam, &dummy, &pMem, &pLast);
+
+	if (msg == IS_SUCCESS) {
+		//copy last buffer to passed pointer
+		memcpy(image,(char *)pLast, 3 * width * height);
+		//unlock the ring buffer
+		is_UnlockSeqBuf(hCam, dummy, pLast);
+
+		return true; //nominal OK
+    } return false;*/
+}
+
+int CamUeye_driver::CalcBitsPerPixel(INT ueye_colormode) {
+
+  switch (ueye_colormode) {
+  default:
+  case IS_CM_MONO8:
+  case IS_CM_BAYER_RG8:
+    return 8;   // occupies 8 Bit
+  case IS_CM_MONO12:
+  case IS_CM_MONO16:
+  case IS_CM_BAYER_RG12:
+  case IS_CM_BAYER_RG16:
+  case IS_CM_BGR555_PACKED:
+  case IS_CM_BGR565_PACKED:
+  case IS_CM_UYVY_PACKED:
+  case IS_CM_CBYCRY_PACKED:
+    return 16;  // occupies 16 Bit
+  case IS_CM_RGB8_PACKED:
+  case IS_CM_BGR8_PACKED:
+    return 24;
+  case IS_CM_RGBA8_PACKED:
+  case IS_CM_BGRA8_PACKED:
+  case IS_CM_RGBY8_PACKED:
+  case IS_CM_BGRY8_PACKED:
+  case IS_CM_RGB10V2_PACKED:
+  case IS_CM_BGR10V2_PACKED:
+    return 32;
+  }
+}
+
+
+void CamUeye_driver::EnableDebug(bool bDebug) {
+	debug = bDebug;
+}
+
+bool CamUeye_driver::SetExposure(double expval) {
+    return is_SetExposureTime(hCam, expval, &exposure) == IS_SUCCESS;
+}
+
+bool CamUeye_driver::setMasterGain(double gain) {
+	INT igain = gain * 100;
+	if (igain > 100) igain = 100;
+	else if (igain < 0) igain = 0;
+	return is_SetHardwareGain(hCam, igain, IS_IGNORE_PARAMETER, IS_IGNORE_PARAMETER, IS_IGNORE_PARAMETER) == IS_SUCCESS;
+}
+
+bool CamUeye_driver::setRGBGains(double rGain, double gGain, double bGain) {
+	INT irgain = rGain * 100;
+	if (irgain > 100) irgain = 100;
+	else if (irgain < 0) irgain = 0;
+	INT iggain = gGain * 100;
+	if (iggain > 100) iggain = 100;
+	else if (iggain < 0) iggain = 0;
+	INT ibgain = bGain * 100;
+	if (ibgain > 100) ibgain = 100;
+	else if (ibgain < 0) ibgain = 0;
+	return is_SetHardwareGain(hCam, IS_IGNORE_PARAMETER, irgain, iggain, ibgain) == IS_SUCCESS;
+}
+
+cvg_bool CamUeye_driver::getImageSize(int *width, int *height) {
+	IS_SIZE_2D size;
+	cvg_bool res = is_AOI(hCam, IS_AOI_IMAGE_GET_SIZE, &size, sizeof(IS_SIZE_2D)) == IS_SUCCESS;
+	if (res) {
+		*width = size.s32Width;
+		*height = size.s32Height;
+	}
+	return res;
+}
+
+double CamUeye_driver::getExposure() {
+	double val = -1;
+	is_Exposure(hCam, IS_EXPOSURE_CMD_GET_EXPOSURE, &val, sizeof(double));
+	return val;
+}
+
+double CamUeye_driver::getFps() {
+	double val = -1;
+	is_GetFramesPerSecond(hCam, &val);
+	return val;
+}
+
+}
