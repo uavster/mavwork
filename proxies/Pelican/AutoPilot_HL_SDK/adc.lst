@@ -1,0 +1,649 @@
+   1              		.file	"adc.c"
+   9              	.Ltext0:
+  10              		.global	ADC0IntDone
+  11              		.bss
+  12              		.align	2
+  15              	ADC0IntDone:
+  16 0000 00000000 		.space	4
+  17              		.global	ADC1IntDone
+  18              		.align	2
+  21              	ADC1IntDone:
+  22 0004 00000000 		.space	4
+  23              		.global	__udivsi3
+  24              		.text
+  25              		.align	2
+  26              		.global	ADCInit
+  28              	ADCInit:
+  29              	.LFB2:
+  30              		.file 1 "adc.c"
+   1:adc.c         **** /*****************************************************************************
+   2:adc.c         ****  *   adc.c:  ADC module file for Philips LPC214x Family Microprocessors
+   3:adc.c         ****  *
+   4:adc.c         ****  *   Copyright(C) 2006, Philips Semiconductor
+   5:adc.c         ****  *   All rights reserved.
+   6:adc.c         ****  *
+   7:adc.c         ****  *   History
+   8:adc.c         ****  *   2005.10.01  ver 1.00    Prelimnary version, first Release
+   9:adc.c         ****  *
+  10:adc.c         **** ******************************************************************************/
+  11:adc.c         **** #include "LPC214x.h"                        /* LPC21xx definitions */
+  12:adc.c         **** #include "type.h"
+  13:adc.c         **** #include "irq.h"
+  14:adc.c         **** #include "target.h"
+  15:adc.c         **** #include "adc.h"
+  16:adc.c         **** 
+  17:adc.c         **** volatile unsigned int ADC0Value[ADC_NUM], ADC1Value[ADC_NUM];
+  18:adc.c         **** volatile unsigned int ADC0IntDone = 0, ADC1IntDone = 0;
+  19:adc.c         **** 
+  20:adc.c         **** #if ADC_INTERRUPT_FLAG
+  21:adc.c         **** /******************************************************************************
+  22:adc.c         **** ** Function name:		ADC0Handler
+  23:adc.c         **** **
+  24:adc.c         **** ** Descriptions:		ADC0 interrupt handler
+  25:adc.c         **** **
+  26:adc.c         **** ** parameters:			None
+  27:adc.c         **** ** Returned value:		None
+  28:adc.c         **** ** 
+  29:adc.c         **** ******************************************************************************/
+  30:adc.c         **** void ADC0Handler (void) __irq 
+  31:adc.c         **** {
+  32:adc.c         ****     unsigned int regVal;
+  33:adc.c         ****   
+  34:adc.c         ****     IENABLE;			/* handles nested interrupt */
+  35:adc.c         **** 
+  36:adc.c         ****     regVal = AD0STAT;		/* Read ADC will clear the interrupt */
+  37:adc.c         ****     if ( regVal & 0x0000FF00 )	/* check OVERRUN error first */
+  38:adc.c         ****     {
+  39:adc.c         **** 	regVal = (regVal & 0x0000FF00) >> 0x08;
+  40:adc.c         **** 				/* if overrun, just read ADDR to clear */
+  41:adc.c         **** 				/* regVal variable has been reused. */
+  42:adc.c         **** 	switch ( regVal )
+  43:adc.c         **** 	{
+  44:adc.c         **** 	    case 0x01:
+  45:adc.c         **** 		regVal = AD0DR0;
+  46:adc.c         **** 		break;
+  47:adc.c         **** 	    case 0x02:
+  48:adc.c         **** 		regVal = AD0DR1;
+  49:adc.c         **** 		break;
+  50:adc.c         **** 	    case 0x04:
+  51:adc.c         **** 		regVal = AD0DR2;
+  52:adc.c         **** 		break;
+  53:adc.c         **** 	    case 0x08:
+  54:adc.c         **** 		regVal = AD0DR3;
+  55:adc.c         **** 		break;
+  56:adc.c         **** 	    case 0x10:
+  57:adc.c         **** 		regVal = AD0DR4;
+  58:adc.c         **** 		break;
+  59:adc.c         **** 	    case 0x20:
+  60:adc.c         **** 		regVal = AD0DR5;
+  61:adc.c         **** 		break;
+  62:adc.c         **** 	    case 0x40:
+  63:adc.c         **** 		regVal = AD0DR6;
+  64:adc.c         **** 		break;
+  65:adc.c         **** 	    case 0x80:
+  66:adc.c         **** 		regVal = AD0DR7;
+  67:adc.c         **** 		break;
+  68:adc.c         **** 	    default:
+  69:adc.c         **** 		break;
+  70:adc.c         **** 	}
+  71:adc.c         **** 	AD0CR &= 0xF8FFFFFF;	/* stop ADC now */ 
+  72:adc.c         **** 	ADC0IntDone = 1;
+  73:adc.c         **** 	return;	
+  74:adc.c         ****     }
+  75:adc.c         ****     
+  76:adc.c         ****     if ( regVal & ADC_ADINT )
+  77:adc.c         ****     {
+  78:adc.c         **** 	switch ( regVal & 0xFF )	/* check DONE bit */
+  79:adc.c         **** 	{
+  80:adc.c         **** 	    case 0x01:
+  81:adc.c         **** 		ADC0Value[0] = ( AD0DR0 >> 6 ) & 0x3FF;
+  82:adc.c         **** 		break;
+  83:adc.c         **** 	    case 0x02:
+  84:adc.c         **** 		ADC0Value[1] = ( AD0DR1 >> 6 ) & 0x3FF;
+  85:adc.c         **** 		break;
+  86:adc.c         **** 	    case 0x04:
+  87:adc.c         **** 		ADC0Value[2] = ( AD0DR2 >> 6 ) & 0x3FF;
+  88:adc.c         **** 		break;
+  89:adc.c         **** 	    case 0x08:
+  90:adc.c         **** 		ADC0Value[3] = ( AD0DR3 >> 6 ) & 0x3FF;
+  91:adc.c         **** 		break;
+  92:adc.c         **** 	    case 0x10:
+  93:adc.c         **** 		ADC0Value[4] = ( AD0DR4 >> 6 ) & 0x3FF;
+  94:adc.c         **** 		break;
+  95:adc.c         **** 	    case 0x20:
+  96:adc.c         **** 		ADC0Value[5] = ( AD0DR5 >> 6 ) & 0x3FF;
+  97:adc.c         **** 		break;
+  98:adc.c         **** 	    case 0x40:
+  99:adc.c         **** 		ADC0Value[6] = ( AD0DR6 >> 6 ) & 0x3FF;
+ 100:adc.c         **** 		break;
+ 101:adc.c         **** 	    case 0x80:
+ 102:adc.c         **** 		ADC0Value[7] = ( AD0DR7 >> 6 ) & 0x3FF;
+ 103:adc.c         **** 		break;		
+ 104:adc.c         **** 	    default:
+ 105:adc.c         **** 		break;
+ 106:adc.c         **** 	}
+ 107:adc.c         **** 	AD0CR &= 0xF8FFFFFF;	/* stop ADC now */ 
+ 108:adc.c         **** 	ADC0IntDone = 1;
+ 109:adc.c         ****     }
+ 110:adc.c         **** 
+ 111:adc.c         ****     IDISABLE;
+ 112:adc.c         ****     VICVectAddr = 0;		/* Acknowledge Interrupt */
+ 113:adc.c         **** }
+ 114:adc.c         **** 
+ 115:adc.c         **** /******************************************************************************
+ 116:adc.c         **** ** Function name:		ADC1Handler
+ 117:adc.c         **** **
+ 118:adc.c         **** ** Descriptions:		ADC1 interrupt handler
+ 119:adc.c         **** **
+ 120:adc.c         **** ** parameters:			None
+ 121:adc.c         **** ** Returned value:		None
+ 122:adc.c         **** ** 
+ 123:adc.c         **** ******************************************************************************/
+ 124:adc.c         **** void ADC1Handler (void) __irq 
+ 125:adc.c         **** {
+ 126:adc.c         ****     unsigned int regVal;
+ 127:adc.c         ****   
+ 128:adc.c         ****     IENABLE;			/* handles nested interrupt */
+ 129:adc.c         **** 
+ 130:adc.c         ****     regVal = AD1STAT;		/* Read ADC will clear the interrupt */
+ 131:adc.c         ****     if ( regVal & 0x0000FF00 )	/* check OVERRUN error first */
+ 132:adc.c         ****     {
+ 133:adc.c         **** 	regVal = (regVal & 0x0000FF00) >> 0x08;
+ 134:adc.c         **** 				/* if overrun, just read AD1DRx to clear */
+ 135:adc.c         **** 				/* regVal variable has been reused. */
+ 136:adc.c         **** 	switch ( regVal )
+ 137:adc.c         **** 	{
+ 138:adc.c         **** 	    case 0x01:
+ 139:adc.c         **** 		regVal = AD1DR0;
+ 140:adc.c         **** 		break;
+ 141:adc.c         **** 	    case 0x02:
+ 142:adc.c         **** 		regVal = AD1DR1;
+ 143:adc.c         **** 		break;
+ 144:adc.c         **** 	    case 0x04:
+ 145:adc.c         **** 		regVal = AD1DR2;
+ 146:adc.c         **** 		break;
+ 147:adc.c         **** 	    case 0x08:
+ 148:adc.c         **** 		regVal = AD1DR3;
+ 149:adc.c         **** 		break;
+ 150:adc.c         **** 	    case 0x10:
+ 151:adc.c         **** 		regVal = AD1DR4;
+ 152:adc.c         **** 		break;
+ 153:adc.c         **** 	    case 0x20:
+ 154:adc.c         **** 		regVal = AD1DR5;
+ 155:adc.c         **** 		break;
+ 156:adc.c         **** 	    case 0x40:
+ 157:adc.c         **** 		regVal = AD1DR6;
+ 158:adc.c         **** 		break;
+ 159:adc.c         **** 	    case 0x80:
+ 160:adc.c         **** 		regVal = AD1DR7;
+ 161:adc.c         **** 		break;
+ 162:adc.c         **** 	    default:
+ 163:adc.c         **** 		break;
+ 164:adc.c         **** 	}
+ 165:adc.c         **** 	AD1CR &= 0xF8FFFFFF;	/* stop ADC now */ 
+ 166:adc.c         **** 	ADC1IntDone = 1;
+ 167:adc.c         **** 	return;	
+ 168:adc.c         ****     }
+ 169:adc.c         ****     
+ 170:adc.c         ****     if ( regVal & ADC_ADINT )
+ 171:adc.c         ****     {
+ 172:adc.c         **** 	switch ( regVal & 0xFF )	/* check DONE bit */
+ 173:adc.c         **** 	{
+ 174:adc.c         **** 	    case 0x01:
+ 175:adc.c         **** 		ADC1Value[0] = ( AD1DR0 >> 6 ) & 0x3FF;
+ 176:adc.c         **** 		break;
+ 177:adc.c         **** 	    case 0x02:
+ 178:adc.c         **** 		ADC1Value[1] = ( AD1DR1 >> 6 ) & 0x3FF;
+ 179:adc.c         **** 		break;
+ 180:adc.c         **** 	    case 0x04:
+ 181:adc.c         **** 		ADC1Value[2] = ( AD1DR2 >> 6 ) & 0x3FF;
+ 182:adc.c         **** 		break;
+ 183:adc.c         **** 	    case 0x08:
+ 184:adc.c         **** 		ADC1Value[3] = ( AD1DR3 >> 6 ) & 0x3FF;
+ 185:adc.c         **** 		break;
+ 186:adc.c         **** 	    case 0x10:
+ 187:adc.c         **** 		ADC1Value[4] = ( AD1DR4 >> 6 ) & 0x3FF;
+ 188:adc.c         **** 		break;		
+ 189:adc.c         **** 	    case 0x20:
+ 190:adc.c         **** 		ADC1Value[5] = ( AD1DR5 >> 6 ) & 0x3FF;
+ 191:adc.c         **** 		break;
+ 192:adc.c         **** 	    case 0x40:
+ 193:adc.c         **** 		ADC1Value[6] = ( AD1DR6 >> 6 ) & 0x3FF;
+ 194:adc.c         **** 		break;
+ 195:adc.c         **** 	    case 0x80:
+ 196:adc.c         **** 		ADC1Value[7] = ( AD1DR7 >> 6 ) & 0x3FF;
+ 197:adc.c         **** 		break;		
+ 198:adc.c         **** 	    default:
+ 199:adc.c         **** 		break;
+ 200:adc.c         **** 	}
+ 201:adc.c         **** 	AD1CR &= 0xF8FFFFFF;	/* stop ADC now */ 
+ 202:adc.c         **** 	ADC1IntDone = 1;
+ 203:adc.c         ****     }
+ 204:adc.c         **** 
+ 205:adc.c         ****     IDISABLE;
+ 206:adc.c         ****     VICVectAddr = 0;		/* Acknowledge Interrupt */
+ 207:adc.c         **** }
+ 208:adc.c         **** #endif
+ 209:adc.c         **** 
+ 210:adc.c         **** /*****************************************************************************
+ 211:adc.c         **** ** Function name:		ADCInit
+ 212:adc.c         **** **
+ 213:adc.c         **** ** Descriptions:		initialize ADC channel
+ 214:adc.c         **** **
+ 215:adc.c         **** ** parameters:			ADC clock rate
+ 216:adc.c         **** ** Returned value:		true or false
+ 217:adc.c         **** ** 
+ 218:adc.c         **** *****************************************************************************/
+ 219:adc.c         **** unsigned int ADCInit( unsigned int ADC_Clk )
+ 220:adc.c         **** {
+  31              	orts interworking.
+  32              		@ args = 0, pretend = 0, frame = 4
+  33              		@ frame_needed = 1, uses_anonymous_args = 0
+  34              		mov	ip, sp
+  35 0000 0DC0A0E1 	.LCFI0:
+  36              		stmfd	sp!, {r4, fp, ip, lr, pc}
+  37 0004 10D82DE9 	.LCFI1:
+  38              		sub	fp, ip, #4
+  39 0008 04B04CE2 	.LCFI2:
+  40              		sub	sp, sp, #4
+  41 000c 04D04DE2 	.LCFI3:
+  42              		str	r0, [fp, #-20]
+  43 0010 14000BE5 		.loc 1 221 0
+ 221:adc.c         ****       AD0CR = ( 0x01 << 0 ) | 	// SEL=1,select channel 0, 1 to 4 on ADC0
+  44              	6870912
+  45 0014 0E42A0E3 		add	r4, r4, #212992
+  46 0018 0D4984E2 		mov	r0, #15007744
+  47 001c E508A0E3 		sub	r0, r0, #7744
+  48 0020 790D40E2 		ldr	r1, [fp, #-20]
+  49 0024 14101BE5 		bl	__udivsi3
+  50 0028 FEFFFFEB 		mov	r3, r0
+  51 002c 0030A0E1 		sub	r3, r3, #1
+  52 0030 013043E2 		mov	r3, r3, asl #8
+  53 0034 0334A0E1 		orr	r3, r3, #2097152
+  54 0038 023683E3 		orr	r3, r3, #1
+  55 003c 013083E3 		str	r3, [r4, #0]
+  56 0040 003084E5 		.loc 1 230 0
+ 222:adc.c         **** 	( ( Fpclk / ADC_Clk - 1 ) << 8 ) |  // CLKDIV = Fpclk / 1000000 - 1 
+ 223:adc.c         **** 	( 0 << 16 ) | 		// BURST = 0, no BURST, software controlled
+ 224:adc.c         **** 	( 0 << 17 ) |  		// CLKS = 0, 11 clocks/10 bits 
+ 225:adc.c         **** 	( 1 << 21 ) |  		// PDN = 1, normal operation 
+ 226:adc.c         **** 	( 0 << 22 ) |  		// TEST1:0 = 00 
+ 227:adc.c         **** 	( 0 << 24 ) |  		// START = 0 A/D conversion stops
+ 228:adc.c         **** 	( 0 << 27 );		/* EDGE = 0 (CAP/MAT singal falling,trigger A/D 
+ 229:adc.c         **** 				conversion) */
+ 230:adc.c         ****     AD1CR = ( 0x01 << 0 ) | 	// SEL=1,select channel 0, 0 to 7 on ADC1
+  57              	6870912
+  58 0044 0E42A0E3 		add	r4, r4, #393216
+  59 0048 064884E2 		mov	r0, #15007744
+  60 004c E508A0E3 		sub	r0, r0, #7744
+  61 0050 790D40E2 		ldr	r1, [fp, #-20]
+  62 0054 14101BE5 		bl	__udivsi3
+  63 0058 FEFFFFEB 		mov	r3, r0
+  64 005c 0030A0E1 		sub	r3, r3, #1
+  65 0060 013043E2 		mov	r3, r3, asl #8
+  66 0064 0334A0E1 		orr	r3, r3, #2097152
+  67 0068 023683E3 		orr	r3, r3, #1
+  68 006c 013083E3 		str	r3, [r4, #0]
+  69 0070 003084E5 		.loc 1 255 0
+ 231:adc.c         **** 	( ( Fpclk / ADC_Clk - 1 ) << 8 ) |  // CLKDIV = Fpclk / 1000000 - 1 
+ 232:adc.c         **** 	( 0 << 16 ) | 		// BURST = 0, no BURST, software controlled 
+ 233:adc.c         **** 	( 0 << 17 ) |  		// CLKS = 0, 11 clocks/10 bits 
+ 234:adc.c         **** 	( 1 << 21 ) |  		// PDN = 1, normal operation 
+ 235:adc.c         **** 	( 0 << 22 ) |  		// TEST1:0 = 00 
+ 236:adc.c         **** 	( 0 << 24 ) |  		// START = 0 A/D conversion stops
+ 237:adc.c         **** 	( 0 << 27 );		/* EDGE = 0 (CAP/MAT singal falling,trigger A/D 
+ 238:adc.c         **** 				conversion) */
+ 239:adc.c         **** 
+ 240:adc.c         ****     /* If POLLING, no need to do the following */
+ 241:adc.c         **** #if ADC_INTERRUPT_FLAG
+ 242:adc.c         ****     AD0INTEN = 0x11E;		// Enable all interrupts 
+ 243:adc.c         ****     AD1INTEN = 0x1FF;
+ 244:adc.c         **** 
+ 245:adc.c         ****     if ( install_irq( ADC0_INT, (void *)ADC0Handler ) == FALSE )
+ 246:adc.c         ****     {
+ 247:adc.c         **** 	return (FALSE);
+ 248:adc.c         ****     }
+ 249:adc.c         ****     if ( install_irq( ADC1_INT, (void *)ADC1Handler ) == FALSE )
+ 250:adc.c         ****     {
+ 251:adc.c         **** 	return (FALSE);
+ 252:adc.c         ****     }
+ 253:adc.c         **** #endif
+ 254:adc.c         **** 
+ 255:adc.c         ****     return (TRUE);
+  70              	.loc 1 256 0
+  71 0074 0130A0E3 		mov	r0, r3
+ 256:adc.c         **** }
+  72              	ub	sp, fp, #16
+  73 0078 0300A0E1 		ldmfd	sp, {r4, fp, sp, lr}
+  74 007c 10D04BE2 		bx	lr
+  75 0080 10689DE8 	.LFE2:
+  77              		.align	2
+  78              		.global	ADC0Read
+  80              	ADC0Read:
+  81              	.LFB3:
+  82              		.loc 1 268 0
+  83              		@ Function supports interworking.
+ 257:adc.c         **** 
+ 258:adc.c         **** /*****************************************************************************
+ 259:adc.c         **** ** Function name:		ADC0Read
+ 260:adc.c         **** **
+ 261:adc.c         **** ** Descriptions:		Read ADC0 channel
+ 262:adc.c         **** **
+ 263:adc.c         **** ** parameters:			Channel number
+ 264:adc.c         **** ** Returned value:		Value read, if interrupt driven, return channel #
+ 265:adc.c         **** ** 
+ 266:adc.c         **** *****************************************************************************/
+ 267:adc.c         **** unsigned int ADC0Read( unsigned char channelNum )
+ 268:adc.c         **** {
+  84              	 pretend = 0, frame = 20
+  85              		@ frame_needed = 1, uses_anonymous_args = 0
+  86              		mov	ip, sp
+  87              	.LCFI4:
+  88 0088 0DC0A0E1 		stmfd	sp!, {fp, ip, lr, pc}
+  89              	.LCFI5:
+  90 008c 00D82DE9 		sub	fp, ip, #4
+  91              	.LCFI6:
+  92 0090 04B04CE2 		sub	sp, sp, #20
+  93              	.LCFI7:
+  94 0094 14D04DE2 		mov	r3, r0
+  95              		strb	r3, [fp, #-28]
+  96 0098 0030A0E1 		.loc 1 271 0
+  97 009c 1C304BE5 		mov	r3, #0
+ 269:adc.c         **** #if !ADC_INTERRUPT_FLAG
+ 270:adc.c         ****     unsigned int regVal, ADC_Data;
+ 271:adc.c         ****     volatile unsigned int timeout=0;
+  98              	#-24]
+  99 00a0 0030A0E3 		.loc 1 275 0
+ 100 00a4 18300BE5 		ldrb	r3, [fp, #-28]	@ zero_extendqisi2
+ 272:adc.c         **** #endif
+ 273:adc.c         **** 
+ 274:adc.c         ****     /* channel number is 0 through 7 */
+ 275:adc.c         ****     if ( channelNum >= ADC_NUM )
+ 101              	p	r3, #7
+ 102 00a8 1C305BE5 		bls	.L4
+ 103 00ac 070053E3 		.loc 1 277 0
+ 104 00b0 0100009A 		mov	r3, #0
+ 276:adc.c         ****     {
+ 277:adc.c         **** 	channelNum = 0;		/* reset channel number to 0 */
+ 105              	b	r3, [fp, #-28]
+ 106 00b4 0030A0E3 	.L4:
+ 107 00b8 1C304BE5 		.loc 1 279 0
+ 108              		mov	r2, #-536870912
+ 278:adc.c         ****     }
+ 279:adc.c         ****     AD0CR &= 0xFFFFFF00;
+ 109              		r2, r2, #212992
+ 110 00bc 0E22A0E3 		mov	r3, #-536870912
+ 111 00c0 0D2982E2 		add	r3, r3, #212992
+ 112 00c4 0E32A0E3 		ldr	r3, [r3, #0]
+ 113 00c8 0D3983E2 		bic	r3, r3, #255
+ 114 00cc 003093E5 		str	r3, [r2, #0]
+ 115 00d0 FF30C3E3 		.loc 1 280 0
+ 116 00d4 003082E5 		mov	r1, #-536870912
+ 280:adc.c         ****     AD0CR |= (1 << 24) | (1 << channelNum);	
+ 117              	 r1, #212992
+ 118 00d8 0E12A0E3 		mov	r3, #-536870912
+ 119 00dc 0D1981E2 		add	r3, r3, #212992
+ 120 00e0 0E32A0E3 		ldr	r0, [r3, #0]
+ 121 00e4 0D3983E2 		ldrb	r2, [fp, #-28]	@ zero_extendqisi2
+ 122 00e8 000093E5 		mov	r3, #1
+ 123 00ec 1C205BE5 		mov	r3, r3, asl r2
+ 124 00f0 0130A0E3 		orr	r3, r0, r3
+ 125 00f4 1332A0E1 		orr	r3, r3, #16777216
+ 126 00f8 033080E1 		str	r3, [r1, #0]
+ 127 00fc 013483E3 		.loc 1 283 0
+ 128 0100 003081E5 		b	.L6
+ 281:adc.c         **** 				/* switch channel,start A/D convert */
+ 282:adc.c         **** #if !ADC_INTERRUPT_FLAG
+ 283:adc.c         ****     while ( timeout++<5000 )			/* wait until end of A/D convert */
+ 129              	 285 0
+ 130 0104 090000EA 		ldrb	r3, [fp, #-28]	@ zero_extendqisi2
+ 131              		mov	r3, r3, asl #2
+ 284:adc.c         ****     {
+ 285:adc.c         **** 	regVal = *(volatile unsigned long *)(AD0_BASE_ADDR 
+ 132              	d	r3, r3, #-536870912
+ 133 0108 1C305BE5 		add	r3, r3, #212992
+ 134 010c 0331A0E1 		add	r3, r3, #16
+ 135 0110 0E3283E2 		ldr	r3, [r3, #0]
+ 136 0114 0D3983E2 		str	r3, [fp, #-20]
+ 137 0118 103083E2 		.loc 1 288 0
+ 138 011c 003093E5 		ldr	r3, [fp, #-20]
+ 139 0120 14300BE5 		cmp	r3, #0
+ 286:adc.c         **** 			+ ADC_OFFSET + ADC_INDEX * channelNum);
+ 287:adc.c         **** 				/* read result of A/D conversion */
+ 288:adc.c         **** 	if ( regVal & ADC_DONE )
+ 140              	
+ 141 0124 14301BE5 	.L6:
+ 142 0128 000053E3 		.loc 1 283 0
+ 143 012c 0A0000BA 		ldr	r1, [fp, #-24]
+ 144              		mov	r3, #4992
+ 145              		add	r3, r3, #7
+ 146 0130 18101BE5 		cmp	r1, r3
+ 147 0134 4E3DA0E3 		movhi	r3, #0
+ 148 0138 073083E2 		movls	r3, #1
+ 149 013c 030051E1 		and	r2, r3, #255
+ 150 0140 0030A083 		add	r3, r1, #1
+ 151 0144 0130A093 		str	r3, [fp, #-24]
+ 152 0148 FF2003E2 		cmp	r2, #0
+ 153 014c 013081E2 		bne	.L7
+ 154 0150 18300BE5 	.L8:
+ 155 0154 000052E3 		.loc 1 294 0
+ 156 0158 EAFFFF1A 		mov	r2, #-536870912
+ 157              		add	r2, r2, #212992
+ 289:adc.c         **** 	{
+ 290:adc.c         **** 	    break;
+ 291:adc.c         **** 	}
+ 292:adc.c         ****     }	
+ 293:adc.c         ****         
+ 294:adc.c         ****     AD0CR &= 0xF8FFFFFF;	/* stop ADC now */    
+ 158              	912
+ 159 015c 0E22A0E3 		add	r3, r3, #212992
+ 160 0160 0D2982E2 		ldr	r3, [r3, #0]
+ 161 0164 0E32A0E3 		bic	r3, r3, #117440512
+ 162 0168 0D3983E2 		str	r3, [r2, #0]
+ 163 016c 003093E5 		.loc 1 295 0
+ 164 0170 0734C3E3 		ldr	r3, [fp, #-20]
+ 165 0174 003082E5 		and	r3, r3, #1073741824
+ 295:adc.c         ****     if ( regVal & ADC_OVERRUN )	/* save data when it's not overrun
+ 166              	 #0
+ 167 0178 14301BE5 		beq	.L9
+ 168 017c 013103E2 		.loc 1 298 0
+ 169 0180 000053E3 		mov	r3, #0
+ 170 0184 0200000A 		str	r3, [fp, #-32]
+ 296:adc.c         **** 				otherwise, return zero */
+ 297:adc.c         ****     {
+ 298:adc.c         **** 	return ( 0 );
+ 171              	11
+ 172 0188 0030A0E3 	.L9:
+ 173 018c 20300BE5 		.loc 1 300 0
+ 174 0190 060000EA 		ldr	r3, [fp, #-20]
+ 175              		mov	r3, r3, lsr #6
+ 299:adc.c         ****     }
+ 300:adc.c         ****     ADC_Data = ( regVal >> 6 ) & 0x3FF;
+ 176              	r3, r3, asl #22
+ 177 0194 14301BE5 		mov	r3, r3, lsr #22
+ 178 0198 2333A0E1 		str	r3, [fp, #-16]
+ 179 019c 033BA0E1 		.loc 1 301 0
+ 180 01a0 233BA0E1 		ldr	r3, [fp, #-16]
+ 181 01a4 10300BE5 		str	r3, [fp, #-32]
+ 301:adc.c         ****     return ( ADC_Data );	/* return A/D conversion value */
+ 182              		ldr	r3, [fp, #-32]
+ 183 01a8 10301BE5 		.loc 1 307 0
+ 184 01ac 20300BE5 		mov	r0, r3
+ 185              		sub	sp, fp, #12
+ 186 01b0 20301BE5 		ldmfd	sp, {fp, sp, lr}
+ 302:adc.c         **** #else
+ 303:adc.c         ****     return ( channelNum );	/* if it's interrupt driven, the 
+ 304:adc.c         **** 				ADC reading is done inside the handler.
+ 305:adc.c         **** 				so, return channel number */
+ 306:adc.c         **** #endif
+ 307:adc.c         **** }
+ 187              	r
+ 188 01b4 0300A0E1 	.LFE3:
+ 190 01bc 00689DE8 		.align	2
+ 191 01c0 1EFF2FE1 		.global	ADC1Read
+ 193              	ADC1Read:
+ 194              	.LFB4:
+ 195              		.loc 1 319 0
+ 196              		@ Function supports interworking.
+ 197              		@ args = 0, pretend = 0, frame = 16
+ 198              		@ frame_needed = 1, uses_anonymous_args = 0
+ 308:adc.c         **** 
+ 309:adc.c         **** /*****************************************************************************
+ 310:adc.c         **** ** Function name:		ADC1Read
+ 311:adc.c         **** **
+ 312:adc.c         **** ** Descriptions:		Read ADC1 channel
+ 313:adc.c         **** **
+ 314:adc.c         **** ** parameters:			Channel number
+ 315:adc.c         **** ** Returned value:		Value read, if interrupt driven, return channel #
+ 316:adc.c         **** ** 
+ 317:adc.c         **** *****************************************************************************/
+ 318:adc.c         **** unsigned int ADC1Read( unsigned char channelNum )
+ 319:adc.c         **** {
+ 199              	.LCFI8:
+ 200              		stmfd	sp!, {fp, ip, lr, pc}
+ 201              	.LCFI9:
+ 202              		sub	fp, ip, #4
+ 203 01c4 0DC0A0E1 	.LCFI10:
+ 204              		sub	sp, sp, #16
+ 205 01c8 00D82DE9 	.LCFI11:
+ 206              		mov	r3, r0
+ 207 01cc 04B04CE2 		strb	r3, [fp, #-24]
+ 208              		.loc 1 326 0
+ 209 01d0 10D04DE2 		ldrb	r3, [fp, #-24]	@ zero_extendqisi2
+ 210              		cmp	r3, #7
+ 211 01d4 0030A0E1 		bls	.L14
+ 212 01d8 18304BE5 		.loc 1 328 0
+ 320:adc.c         **** #if !ADC_INTERRUPT_FLAG
+ 321:adc.c         ****     unsigned int regVal;
+ 322:adc.c         **** 	unsigned int ADC_Data;
+ 323:adc.c         **** #endif
+ 324:adc.c         **** 
+ 325:adc.c         ****     /* channel number is 0 through 7 */
+ 326:adc.c         ****     if ( channelNum >= ADC_NUM )
+ 213              	trb	r3, [fp, #-24]
+ 214 01dc 18305BE5 	.L14:
+ 215 01e0 070053E3 		.loc 1 330 0
+ 216 01e4 0100009A 		mov	r2, #-536870912
+ 327:adc.c         ****     {
+ 328:adc.c         **** 	channelNum = 0;		/* reset channel number to 0 */
+ 217              		r2, r2, #393216
+ 218 01e8 0030A0E3 		mov	r3, #-536870912
+ 219 01ec 18304BE5 		add	r3, r3, #393216
+ 220              		ldr	r3, [r3, #0]
+ 329:adc.c         ****     }
+ 330:adc.c         ****     AD1CR &= 0xFFFFFF00;
+ 221              		r3, r3, #255
+ 222 01f0 0E22A0E3 		str	r3, [r2, #0]
+ 223 01f4 062882E2 		.loc 1 331 0
+ 224 01f8 0E32A0E3 		mov	r1, #-536870912
+ 225 01fc 063883E2 		add	r1, r1, #393216
+ 226 0200 003093E5 		mov	r3, #-536870912
+ 227 0204 FF30C3E3 		add	r3, r3, #393216
+ 228 0208 003082E5 		ldr	r0, [r3, #0]
+ 331:adc.c         ****     AD1CR |= (1 << 24) | (1 << channelNum);	
+ 229              	, [fp, #-24]	@ zero_extendqisi2
+ 230 020c 0E12A0E3 		mov	r3, #1
+ 231 0210 061881E2 		mov	r3, r3, asl r2
+ 232 0214 0E32A0E3 		orr	r3, r0, r3
+ 233 0218 063883E2 		orr	r3, r3, #16777216
+ 234 021c 000093E5 		str	r3, [r1, #0]
+ 235 0220 18205BE5 	.L16:
+ 236 0224 0130A0E3 		.loc 1 336 0
+ 237 0228 1332A0E1 		ldrb	r3, [fp, #-24]	@ zero_extendqisi2
+ 238 022c 033080E1 		mov	r3, r3, asl #2
+ 239 0230 013483E3 		add	r3, r3, #-536870912
+ 240 0234 003081E5 		add	r3, r3, #393216
+ 241              		add	r3, r3, #16
+ 332:adc.c         **** 				/* switch channel,start A/D convert */
+ 333:adc.c         **** #if !ADC_INTERRUPT_FLAG
+ 334:adc.c         ****     while ( 1 )			/* wait until end of A/D convert */
+ 335:adc.c         ****     {
+ 336:adc.c         **** 	regVal = *(volatile unsigned long *)(AD1_BASE_ADDR 
+ 242              	 #0]
+ 243 0238 18305BE5 		str	r3, [fp, #-20]
+ 244 023c 0331A0E1 		.loc 1 339 0
+ 245 0240 0E3283E2 		ldr	r3, [fp, #-20]
+ 246 0244 063883E2 		cmp	r3, #0
+ 247 0248 103083E2 		blt	.L17
+ 248 024c 003093E5 		.loc 1 343 0
+ 249 0250 14300BE5 		b	.L16
+ 337:adc.c         **** 			+ ADC_OFFSET + ADC_INDEX * channelNum);
+ 338:adc.c         **** 				/* read result of A/D conversion */
+ 339:adc.c         **** 	if ( regVal & ADC_DONE )
+ 250              	loc 1 345 0
+ 251 0254 14301BE5 		mov	r2, #-536870912
+ 252 0258 000053E3 		add	r2, r2, #393216
+ 253 025c 000000BA 		mov	r3, #-536870912
+ 340:adc.c         **** 	{
+ 341:adc.c         **** 	    break;
+ 342:adc.c         **** 	}
+ 343:adc.c         ****     }	
+ 254              		r3, r3, #393216
+ 255 0260 F4FFFFEA 		ldr	r3, [r3, #0]
+ 256              		bic	r3, r3, #117440512
+ 344:adc.c         ****         
+ 345:adc.c         ****     AD1CR &= 0xF8FFFFFF;	/* stop ADC now */
+ 257              	r	r3, [r2, #0]
+ 258 0264 0E22A0E3 		.loc 1 346 0
+ 259 0268 062882E2 		ldr	r3, [fp, #-20]
+ 260 026c 0E32A0E3 		and	r3, r3, #1073741824
+ 261 0270 063883E2 		cmp	r3, #0
+ 262 0274 003093E5 		beq	.L19
+ 263 0278 0734C3E3 		.loc 1 349 0
+ 264 027c 003082E5 		mov	r3, #0
+ 346:adc.c         ****     if ( regVal & ADC_OVERRUN )	/* save data when it's not overrun
+ 265              	 [fp, #-28]
+ 266 0280 14301BE5 		b	.L21
+ 267 0284 013103E2 	.L19:
+ 268 0288 000053E3 		.loc 1 352 0
+ 269 028c 0200000A 		ldr	r3, [fp, #-20]
+ 347:adc.c         **** 				otherwise, return zero */
+ 348:adc.c         ****     {
+ 349:adc.c         **** 	return ( 0 );
+ 270              	r3, r3, lsr #6
+ 271 0290 0030A0E3 		mov	r3, r3, asl #22
+ 272 0294 1C300BE5 		mov	r3, r3, lsr #22
+ 273 0298 060000EA 		str	r3, [fp, #-16]
+ 274              		.loc 1 353 0
+ 350:adc.c         ****     }
+ 351:adc.c         ****     
+ 352:adc.c         ****     ADC_Data = ( regVal >> 6 ) & 0x3FF;
+ 275              	r3, [fp, #-16]
+ 276 029c 14301BE5 		str	r3, [fp, #-28]
+ 277 02a0 2333A0E1 	.L21:
+ 278 02a4 033BA0E1 		ldr	r3, [fp, #-28]
+ 279 02a8 233BA0E1 		.loc 1 357 0
+ 280 02ac 10300BE5 		mov	r0, r3
+ 353:adc.c         ****     return ( ADC_Data );	/* return A/D conversion value */
+ 281              	p, fp, #12
+ 282 02b0 10301BE5 		ldmfd	sp, {fp, sp, lr}
+ 283 02b4 1C300BE5 		bx	lr
+ 284              	.LFE4:
+ 354:adc.c         **** #else
+ 355:adc.c         ****     return ( channelNum );
+ 356:adc.c         **** #endif
+ 357:adc.c         **** }
+ 286              	m	ADC0Value,32,4
+ 287 02bc 0300A0E1 		.comm	ADC1Value,32,4
+ 288 02c0 0CD04BE2 		.section	.debug_frame,"",%progbits
+ 289 02c4 00689DE8 	.Lframe0:
+ 290 02c8 1EFF2FE1 		.4byte	.LECIE0-.LSCIE0
+ 291              	.LSCIE0:
+ 292              		.4byte	0xffffffff
+ 293              		.byte	0x1
+ 294              		.ascii	"\000"
+ 388              		.byte	0x5d
+DEFINED SYMBOLS
+                            *ABS*:00000000 adc.c
+C:\Users\ivanm\AppData\Local\Temp/ccmMaaaa.s:15     .bss:00000000 ADC0IntDone
+                             .bss:00000000 $d
+C:\Users\ivanm\AppData\Local\Temp/ccmMaaaa.s:21     .bss:00000004 ADC1IntDone
+C:\Users\ivanm\AppData\Local\Temp/ccmMaaaa.s:28     .text:00000000 ADCInit
+C:\Users\ivanm\AppData\Local\Temp/ccmMaaaa.s:35     .text:00000000 $a
+C:\Users\ivanm\AppData\Local\Temp/ccmMaaaa.s:82     .text:00000088 ADC0Read
+C:\Users\ivanm\AppData\Local\Temp/ccmMaaaa.s:197    .text:000001c4 ADC1Read
+                            *COM*:00000020 ADC0Value
+                            *COM*:00000020 ADC1Value
+
+UNDEFINED SYMBOLS
+__udivsi3

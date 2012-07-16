@@ -1,0 +1,1093 @@
+   1              		.file	"LL_HL_comm.c"
+   9              	.Ltext0:
+  10              		.align	2
+  11              		.global	SSP_data_distribution_HL
+  13              	SSP_data_distribution_HL:
+  14              	.LFB2:
+  15              		.file 1 "LL_HL_comm.c"
+   1:LL_HL_comm.c  **** #include "main.h"
+   2:LL_HL_comm.c  **** #include "LL_HL_comm.h"
+   3:LL_HL_comm.c  **** #include "system.h"
+   4:LL_HL_comm.c  **** #include "gpsmath.h"
+   5:LL_HL_comm.c  **** #include "sdk.h"
+   6:LL_HL_comm.c  **** 
+   7:LL_HL_comm.c  **** unsigned short SSP_ack=0;
+   8:LL_HL_comm.c  **** extern char SPIWRData[128];
+   9:LL_HL_comm.c  **** extern char data_sent_to_HL;
+  10:LL_HL_comm.c  **** extern char data_sent_to_LL;
+  11:LL_HL_comm.c  **** extern unsigned int SPIWR_num_bytes;
+  12:LL_HL_comm.c  **** 
+  13:LL_HL_comm.c  **** struct LL_ATTITUDE_DATA LL_1khz_attitude_data;
+  14:LL_HL_comm.c  **** struct LL_CONTROL_INPUT LL_1khz_control_input;
+  15:LL_HL_comm.c  **** 
+  16:LL_HL_comm.c  **** void SSP_data_distribution_HL(void)
+  17:LL_HL_comm.c  **** {
+  16              	 Function supports interworking.
+  17              		@ args = 0, pretend = 0, frame = 0
+  18              		@ frame_needed = 0, uses_anonymous_args = 0
+  19              		stmfd	sp!, {r4, r5, r6, lr}
+  20 0000 70402DE9 	.LCFI0:
+  21              		.loc 1 19 0
+  18:LL_HL_comm.c  **** 	unsigned char i;
+  19:LL_HL_comm.c  **** 	unsigned char current_page=LL_1khz_attitude_data.system_flags&0x03;
+  22              	5, .L17
+  23 0004 0C519FE5 		ldrh	r3, [r5, #0]
+  24 0008 B030D5E1 		.loc 1 21 0
+  20:LL_HL_comm.c  **** 
+  21:LL_HL_comm.c  **** 	if(LL_1khz_attitude_data.system_flags&SF_GPS_NEW) gpsDataOkTrigger=0;
+  25              	t	r3, #8
+  26 000c 080013E3 		.loc 1 19 0
+  27              		and	r6, r3, #3
+  28 0010 036003E2 	.LVL0:
+  29              		.loc 1 21 0
+  30              		ldrne	r3, .L17+4
+  31 0014 00319F15 		movne	r2, #0
+  32 0018 0020A013 		strne	r2, [r3, #0]
+  33 001c 00208315 		.loc 1 25 0
+  22:LL_HL_comm.c  **** 
+  23:LL_HL_comm.c  **** 	IMU_CalcData.angle_nick=LL_1khz_attitude_data.angle_pitch*10;
+  24:LL_HL_comm.c  **** 	IMU_CalcData.angle_roll=LL_1khz_attitude_data.angle_roll*10;
+  25:LL_HL_comm.c  **** 	IMU_CalcData.angle_yaw=LL_1khz_attitude_data.angle_yaw*10;
+  34              	 [r5, #6]
+  35 0020 B610D5E1 		.loc 1 23 0
+  36              		ldrsh	r3, [r5, #2]
+  37 0024 F230D5E1 		.loc 1 24 0
+  38              		ldrsh	r2, [r5, #4]
+  39 0028 F420D5E1 		.loc 1 23 0
+  40              		ldr	r4, .L17+8
+  41 002c EC409FE5 		.loc 1 29 0
+  26:LL_HL_comm.c  **** 
+  27:LL_HL_comm.c  **** 	IMU_CalcData.angvel_nick=LL_1khz_attitude_data.angvel_pitch;
+  28:LL_HL_comm.c  **** 	IMU_CalcData.angvel_roll=LL_1khz_attitude_data.angvel_roll;
+  29:LL_HL_comm.c  **** 	IMU_CalcData.angvel_yaw=LL_1khz_attitude_data.angvel_yaw;
+  42              	r, [r5, #12]
+  43 0030 FCE0D5E1 		.loc 1 23 0
+  44              		add	r3, r3, r3, asl #2
+  45 0034 033183E0 		.loc 1 24 0
+  46              		add	r2, r2, r2, asl #2
+  47 0038 022182E0 		.loc 1 25 0
+  48              		add	r1, r1, r1, asl #2
+  49 003c 011181E0 		.loc 1 27 0
+  50              		ldrsh	r0, [r5, #8]
+  51 0040 F800D5E1 		.loc 1 28 0
+  52              		ldrsh	ip, [r5, #10]
+  53 0044 FAC0D5E1 		.loc 1 23 0
+  54              		mov	r3, r3, asl #1
+  55 0048 8330A0E1 		.loc 1 24 0
+  56              		mov	r2, r2, asl #1
+  57 004c 8220A0E1 		.loc 1 25 0
+  58              		mov	r1, r1, asl #1
+  59 0050 8110A0E1 		.loc 1 31 0
+  30:LL_HL_comm.c  **** 
+  31:LL_HL_comm.c  **** 	if(!current_page)	//page 0
+  60              	1 29 0
+  61 0054 000056E3 		str	lr, [r4, #20]
+  62              		.loc 1 23 0
+  63 0058 14E084E5 		str	r3, [r4, #0]
+  64              		.loc 1 24 0
+  65 005c 003084E5 		str	r2, [r4, #4]
+  66              		.loc 1 25 0
+  67 0060 042084E5 		str	r1, [r4, #8]
+  68              		.loc 1 27 0
+  69 0064 081084E5 		str	r0, [r4, #12]
+  70              		.loc 1 28 0
+  71 0068 0C0084E5 		str	ip, [r4, #16]
+  72              		.loc 1 23 0
+  73 006c 10C084E5 		mov	lr, r4
+  74              		.loc 1 31 0
+  75 0070 04E0A0E1 		bne	.L4
+  76              		ldr	r1, .L17+12
+  77 0074 1700001A 		mov	r2, r5
+  78 0078 A4109FE5 		add	r0, r5, #8
+  79 007c 0520A0E1 		mov	ip, r5
+  80 0080 080085E2 	.L6:
+  81 0084 05C0A0E1 		.loc 1 35 0
+  82              		ldrb	r3, [r2, #14]	@ zero_extendqisi2
+  32:LL_HL_comm.c  **** 	{
+  33:LL_HL_comm.c  **** 		for(i=0;i<8;i++)
+  34:LL_HL_comm.c  **** 		{
+  35:LL_HL_comm.c  **** 			RO_RC_Data.channel[i]=LL_1khz_attitude_data.RC_data[i]*16;
+  83              	, r3, asl #4
+  84 0088 0E30D2E5 		.loc 1 33 0
+  85 008c 012082E2 		cmp	r2, r0
+  86 0090 0332A0E1 		.loc 1 35 0
+  87              		strh	r3, [r1], #2	@ movhi
+  88 0094 000052E1 		.loc 1 33 0
+  89              		bne	.L6
+  90 0098 B230C1E0 		.loc 1 39 0
+  91              		ldrsh	r3, [ip, #36]
+  92 009c F9FFFF1A 		.loc 1 37 0
+  36:LL_HL_comm.c  **** 		}
+  37:LL_HL_comm.c  **** 		IMU_CalcData.acc_x_calib=LL_1khz_attitude_data.acc_x*10;
+  38:LL_HL_comm.c  **** 		IMU_CalcData.acc_y_calib=LL_1khz_attitude_data.acc_y*10;
+  39:LL_HL_comm.c  **** 		IMU_CalcData.acc_z_calib=LL_1khz_attitude_data.acc_z*10;
+  93              	 [ip, #32]
+  94 00a0 F432DCE1 		.loc 1 38 0
+  95              		ldrsh	r1, [ip, #34]
+  96 00a4 F022DCE1 		.loc 1 37 0
+  97              		add	r2, r2, r2, asl #2
+  98 00a8 F212DCE1 		.loc 1 38 0
+  99              		add	r1, r1, r1, asl #2
+ 100 00ac 022182E0 		.loc 1 39 0
+ 101              		add	r3, r3, r3, asl #2
+ 102 00b0 011181E0 		.loc 1 37 0
+ 103              		mov	r2, r2, asl #1
+ 104 00b4 033183E0 		.loc 1 38 0
+ 105              		mov	r1, r1, asl #1
+ 106 00b8 8220A0E1 		.loc 1 39 0
+ 107              		mov	r3, r3, asl #1
+ 108 00bc 8110A0E1 		strh	r3, [lr, #28]	@ movhi
+ 109              		.loc 1 37 0
+ 110 00c0 8330A0E1 		strh	r2, [lr, #24]	@ movhi
+ 111 00c4 BC31CEE1 		.loc 1 38 0
+ 112              		strh	r1, [lr, #26]	@ movhi
+ 113 00c8 B821CEE1 	.L12:
+ 114              		.loc 1 52 0
+ 115 00cc BA11CEE1 		ldmfd	sp!, {r4, r5, r6, lr}
+ 116              		bx	lr
+  40:LL_HL_comm.c  **** 	}
+  41:LL_HL_comm.c  **** 	else if(current_page==1)	//page 1
+  42:LL_HL_comm.c  **** 	{
+  43:LL_HL_comm.c  **** 		IMU_CalcData.height=LL_1khz_attitude_data.height;
+  44:LL_HL_comm.c  **** 		IMU_CalcData.dheight=LL_1khz_attitude_data.dheight;
+  45:LL_HL_comm.c  **** 	}
+  46:LL_HL_comm.c  **** 	else if(current_page==2)
+  47:LL_HL_comm.c  **** 	{
+  48:LL_HL_comm.c  **** 		IMU_CalcData.Hx=LL_1khz_attitude_data.mag_x;
+  49:LL_HL_comm.c  **** 		IMU_CalcData.Hy=LL_1khz_attitude_data.mag_y;
+  50:LL_HL_comm.c  **** 		IMU_CalcData.Hz=LL_1khz_attitude_data.mag_z;
+  51:LL_HL_comm.c  **** 	}
+  52:LL_HL_comm.c  **** }
+ 117              	6, #1
+ 118 00d0 7040BDE8 		beq	.L16
+ 119 00d4 1EFF2FE1 		.loc 1 46 0
+ 120              		cmp	r6, #2
+ 121              		bne	.L12
+ 122 00d8 010056E3 		.loc 1 50 0
+ 123 00dc 0800000A 		ldrsh	r3, [r5, #70]
+ 124              		.loc 1 48 0
+ 125 00e0 020056E3 		ldrsh	r2, [r5, #66]
+ 126 00e4 F9FFFF1A 		.loc 1 49 0
+ 127              		ldrsh	r1, [r5, #68]
+ 128 00e8 F634D5E1 		.loc 1 50 0
+ 129              		str	r3, [r4, #56]
+ 130 00ec F224D5E1 		.loc 1 48 0
+ 131              		str	r2, [r4, #48]
+ 132 00f0 F414D5E1 		.loc 1 49 0
+ 133              		str	r1, [r4, #52]
+ 134 00f4 383084E5 		b	.L12
+ 135              	.L16:
+ 136 00f8 302084E5 		.loc 1 44 0
+ 137              		ldrsh	r3, [r5, #64]
+ 138 00fc 341084E5 		.loc 1 43 0
+ 139 0100 F2FFFFEA 		ldr	r2, [r5, #60]
+ 140              		.loc 1 44 0
+ 141              		str	r3, [r4, #80]
+ 142 0104 F034D5E1 		.loc 1 43 0
+ 143              		str	r2, [r4, #76]
+ 144 0108 3C2095E5 		b	.L12
+ 145              	.L18:
+ 146 010c 503084E5 		.align	2
+ 147              	.L17:
+ 148 0110 4C2084E5 		.word	LL_1khz_attitude_data
+ 149 0114 EDFFFFEA 		.word	gpsDataOkTrigger
+ 150              		.word	IMU_CalcData
+ 151              		.word	RO_RC_Data
+ 152              	.LFE2:
+ 154 011c 00000000 		.align	2
+ 155 0120 00000000 		.global	LL_write_ctrl_data
+ 157              	LL_write_ctrl_data:
+ 158              	.LFB4:
+ 159              		.loc 1 135 0
+ 160              		@ Function supports interworking.
+ 161              		@ args = 0, pretend = 0, frame = 0
+ 162              		@ frame_needed = 0, uses_anonymous_args = 0
+ 163              	.LVL1:
+  53:LL_HL_comm.c  **** 
+  54:LL_HL_comm.c  **** int HL2LL_write_cycle(void)	//write data to low-level processor
+  55:LL_HL_comm.c  **** {
+  56:LL_HL_comm.c  **** 	static char pageselect=0;
+  57:LL_HL_comm.c  **** 
+  58:LL_HL_comm.c  **** 	if(!data_sent_to_LL) return(0);
+  59:LL_HL_comm.c  **** 
+  60:LL_HL_comm.c  **** 	//update 1kHz data
+  61:LL_HL_comm.c  **** 	LL_1khz_control_input.system_flags=0|pageselect;
+  62:LL_HL_comm.c  **** 	//SSP_ack=0;	//reset ack
+  63:LL_HL_comm.c  **** 
+  64:LL_HL_comm.c  **** 	if(gpsDataOkTrigger) LL_1khz_control_input.system_flags|=SF_GPS_NEW;
+  65:LL_HL_comm.c  **** 
+  66:LL_HL_comm.c  **** #ifndef FALCON
+  67:LL_HL_comm.c  **** 	if(WO_SDK.ctrl_enabled)  LL_1khz_control_input.system_flags|=SF_HL_CONTROL_ENABLED;
+  68:LL_HL_comm.c  **** 	else LL_1khz_control_input.system_flags&=~SF_HL_CONTROL_ENABLED;
+  69:LL_HL_comm.c  **** 
+  70:LL_HL_comm.c  **** 	if(WO_SDK.ctrl_mode==0x01) LL_1khz_control_input.system_flags|=SF_DIRECT_MOTOR_CONTROL;
+  71:LL_HL_comm.c  **** 	else LL_1khz_control_input.system_flags&=~SF_DIRECT_MOTOR_CONTROL;
+  72:LL_HL_comm.c  **** #else //Disable Control Input if system is a FALCON
+  73:LL_HL_comm.c  **** 	LL_1khz_control_input.system_flags&=~SF_HL_CONTROL_ENABLED;
+  74:LL_HL_comm.c  **** 	LL_1khz_control_input.system_flags&=~SF_DIRECT_MOTOR_CONTROL;
+  75:LL_HL_comm.c  **** #endif
+  76:LL_HL_comm.c  **** 
+  77:LL_HL_comm.c  **** 
+  78:LL_HL_comm.c  **** 
+  79:LL_HL_comm.c  **** 	LL_1khz_control_input.ctrl_flags=WO_CTRL_Input.ctrl;
+  80:LL_HL_comm.c  **** 	LL_1khz_control_input.pitch=WO_CTRL_Input.pitch;
+  81:LL_HL_comm.c  **** 	LL_1khz_control_input.roll=WO_CTRL_Input.roll;
+  82:LL_HL_comm.c  **** 	LL_1khz_control_input.yaw=WO_CTRL_Input.yaw;
+  83:LL_HL_comm.c  **** 	LL_1khz_control_input.thrust=WO_CTRL_Input.thrust;
+  84:LL_HL_comm.c  **** 
+  85:LL_HL_comm.c  **** 	if(WO_SDK.ctrl_mode==0x01)
+  86:LL_HL_comm.c  **** 	{
+  87:LL_HL_comm.c  **** 		LL_1khz_control_input.direct_motor_control[0]=WO_Direct_Motor_Control.pitch;
+  88:LL_HL_comm.c  **** 		LL_1khz_control_input.direct_motor_control[1]=WO_Direct_Motor_Control.roll;
+  89:LL_HL_comm.c  **** 		LL_1khz_control_input.direct_motor_control[2]=WO_Direct_Motor_Control.yaw;
+  90:LL_HL_comm.c  **** 		LL_1khz_control_input.direct_motor_control[3]=WO_Direct_Motor_Control.thrust;
+  91:LL_HL_comm.c  **** 	}
+  92:LL_HL_comm.c  **** 
+  93:LL_HL_comm.c  **** /*	for(i=0;i<8;i++)
+  94:LL_HL_comm.c  **** 	{
+  95:LL_HL_comm.c  **** 		LL_1khz_control_input.direct_motor_control[i]=0;
+  96:LL_HL_comm.c  **** 	}
+  97:LL_HL_comm.c  **** */
+  98:LL_HL_comm.c  **** 	if(pageselect==0)
+  99:LL_HL_comm.c  **** 	{
+ 100:LL_HL_comm.c  **** 		//fill struct with 500Hz data
+ 101:LL_HL_comm.c  **** 		LL_1khz_control_input.latitude=GPS_Data.latitude;
+ 102:LL_HL_comm.c  **** 		LL_1khz_control_input.longitude=GPS_Data.longitude;
+ 103:LL_HL_comm.c  **** 		LL_1khz_control_input.height=GPS_Data.height;
+ 104:LL_HL_comm.c  **** 		LL_1khz_control_input.speed_x=GPS_Data.speed_x;
+ 105:LL_HL_comm.c  **** 		LL_1khz_control_input.speed_y=GPS_Data.speed_y;
+ 106:LL_HL_comm.c  **** 		LL_1khz_control_input.heading=GPS_Data.heading;
+ 107:LL_HL_comm.c  **** 		LL_1khz_control_input.status=GPS_Data.status;
+ 108:LL_HL_comm.c  **** 
+ 109:LL_HL_comm.c  **** 		//write data
+ 110:LL_HL_comm.c  **** 		LL_write_ctrl_data(pageselect);
+ 111:LL_HL_comm.c  **** 		//set pageselect to other page for next cycle
+ 112:LL_HL_comm.c  **** 		pageselect=1;
+ 113:LL_HL_comm.c  **** 	}
+ 114:LL_HL_comm.c  **** 	else //pageselect=1
+ 115:LL_HL_comm.c  **** 	{
+ 116:LL_HL_comm.c  **** 		//fill struct with 500Hz data
+ 117:LL_HL_comm.c  **** 		LL_1khz_control_input.hor_accuracy=GPS_Data.horizontal_accuracy;
+ 118:LL_HL_comm.c  **** 		LL_1khz_control_input.vert_accuracy=GPS_Data.vertical_accuracy;
+ 119:LL_HL_comm.c  **** 		LL_1khz_control_input.speed_accuracy=GPS_Data.speed_accuracy;
+ 120:LL_HL_comm.c  **** 		LL_1khz_control_input.numSV=GPS_Data.numSV;
+ 121:LL_HL_comm.c  **** 		LL_1khz_control_input.battery_voltage_1=HL_Status.battery_voltage_1;
+ 122:LL_HL_comm.c  **** 		LL_1khz_control_input.battery_voltage_2=HL_Status.battery_voltage_2;
+ 123:LL_HL_comm.c  **** 		LL_1khz_control_input.dummy_500Hz_2=0;
+ 124:LL_HL_comm.c  **** 		LL_1khz_control_input.dummy_500Hz_3=0;
+ 125:LL_HL_comm.c  **** 
+ 126:LL_HL_comm.c  **** 		//write data
+ 127:LL_HL_comm.c  **** 		LL_write_ctrl_data(pageselect);
+ 128:LL_HL_comm.c  **** 		//set pageselect to other page for next cycle
+ 129:LL_HL_comm.c  **** 		pageselect=0;
+ 130:LL_HL_comm.c  **** 	}
+ 131:LL_HL_comm.c  **** 	return(1);
+ 132:LL_HL_comm.c  **** }
+ 133:LL_HL_comm.c  **** 
+ 134:LL_HL_comm.c  **** void LL_write_ctrl_data(char page)
+ 135:LL_HL_comm.c  **** {
+ 164              	d	sp!, {r4, r5, lr}
+ 165              	.LCFI1:
+ 166              		.loc 1 146 0
+ 167              		ldr	ip, .L32
+ 168              		.loc 1 143 0
+ 136:LL_HL_comm.c  **** 	unsigned int i;
+ 137:LL_HL_comm.c  **** 	unsigned char *dataptr;
+ 138:LL_HL_comm.c  **** 	static volatile short spi_chksum;
+ 139:LL_HL_comm.c  **** 
+ 140:LL_HL_comm.c  **** 	dataptr=(unsigned char *)&LL_1khz_control_input;
+ 141:LL_HL_comm.c  **** 
+ 142:LL_HL_comm.c  **** 	//initialize syncbytes
+ 143:LL_HL_comm.c  **** 	SPIWRData[0]='>';
+ 144:LL_HL_comm.c  **** 	SPIWRData[1]='*';
+ 145:LL_HL_comm.c  **** 
+ 146:LL_HL_comm.c  **** 	spi_chksum=0xAAAA;
+ 147:LL_HL_comm.c  **** 
+ 148:LL_HL_comm.c  **** 	if(!page)
+ 169              	r5, .L32+4
+ 170 0128 FF0010E3 		.loc 1 146 0
+ 171              		mvn	r3, #21760
+ 172 012c 30402DE9 		.loc 1 150 0
+ 173              		ldrne	r0, .L32+8
+ 174              	.LVL2:
+ 175 0130 F8C09FE5 		.loc 1 144 0
+ 176              		mov	r1, #42
+ 177 0134 F8509FE5 		.loc 1 146 0
+ 178              		sub	r3, r3, #85
+ 179 0138 553CE0E3 		.loc 1 143 0
+ 149:LL_HL_comm.c  **** 	{
+ 150:LL_HL_comm.c  **** 		for(i=2;i<40;i++)
+ 180              	2
+ 181 013c F4009F15 		.loc 1 144 0
+ 182              		strb	r1, [r5, #1]
+ 183              		.loc 1 143 0
+ 184 0140 2A10A0E3 		strb	r2, [r5, #0]
+ 185              		.loc 1 146 0
+ 186 0144 553043E2 		strh	r3, [ip, #0]	@ movhi
+ 187              		.loc 1 150 0
+ 188 0148 3E20A0E3 		movne	r1, r5
+ 189              		addne	lr, r0, #20
+ 190 014c 0110C5E5 		.loc 1 148 0
+ 191              		bne	.L24
+ 192 0150 0020C5E5 		ldr	r0, .L32+8
+ 193              	.LVL3:
+ 194 0154 B030CCE1 		mov	r1, r5
+ 195              		add	lr, r0, #38
+ 196 0158 0510A011 	.L22:
+ 197 015c 14E08012 		.loc 1 152 0
+ 198              		ldrb	r2, [r0], #1	@ zero_extendqisi2
+ 199 0160 1900001A 		.loc 1 153 0
+ 200 0164 CC009FE5 		ldrh	r3, [ip, #0]
+ 201              		add	r3, r3, r2
+ 202 0168 0510A0E1 		mov	r3, r3, asl #16
+ 203 016c 26E080E2 		mov	r3, r3, lsr #16
+ 204              		.loc 1 150 0
+ 151:LL_HL_comm.c  **** 		{
+ 152:LL_HL_comm.c  **** 			SPIWRData[i]=*dataptr++;
+ 205              	
+ 206 0170 0120D0E4 		strb	r2, [r1, #2]
+ 153:LL_HL_comm.c  **** 			spi_chksum+=SPIWRData[i];
+ 207              	.loc 1 153 0
+ 208 0174 B030DCE1 		strh	r3, [ip, #0]	@ movhi
+ 209 0178 023083E0 		add	r1, r1, #1
+ 210 017c 0338A0E1 		.loc 1 150 0
+ 211 0180 2338A0E1 		bne	.L22
+ 212              	.LVL4:
+ 213 0184 00005EE1 	.L23:
+ 214              		.loc 1 171 0
+ 215 0188 0220C1E5 		ldrh	r0, [ip, #0]
+ 216              	.LVL5:
+ 217 018c B030CCE1 		.loc 1 172 0
+ 218 0190 011081E2 		ldrh	r3, [ip, #0]
+ 219              		mov	r3, r3, lsr #8
+ 220 0194 F5FFFF1A 		strb	r3, [r5, #41]
+ 221              		.loc 1 174 0
+ 222              		ldr	r3, .L32+12
+ 154:LL_HL_comm.c  **** 		}
+ 155:LL_HL_comm.c  **** 	}
+ 156:LL_HL_comm.c  **** 	else
+ 157:LL_HL_comm.c  **** 	{
+ 158:LL_HL_comm.c  **** 		for(i=2;i<22;i++)
+ 159:LL_HL_comm.c  **** 		{
+ 160:LL_HL_comm.c  **** 			SPIWRData[i]=*dataptr++;
+ 161:LL_HL_comm.c  **** 			spi_chksum+=SPIWRData[i];
+ 162:LL_HL_comm.c  **** 		}
+ 163:LL_HL_comm.c  **** 		dataptr+=18;
+ 164:LL_HL_comm.c  **** 		for(i=22;i<40;i++)
+ 165:LL_HL_comm.c  **** 		{
+ 166:LL_HL_comm.c  **** 			SPIWRData[i]=*dataptr++;
+ 167:LL_HL_comm.c  **** 			spi_chksum+=SPIWRData[i];
+ 168:LL_HL_comm.c  **** 		}
+ 169:LL_HL_comm.c  **** 	}
+ 170:LL_HL_comm.c  **** 
+ 171:LL_HL_comm.c  **** 	SPIWRData[40]=spi_chksum;		//chksum LSB
+ 223              	r	r2, [r3, #0]
+ 224 0198 B000DCE1 		.loc 1 175 0
+ 225              		ldr	r3, .L32+16
+ 172:LL_HL_comm.c  **** 	SPIWRData[41]=(spi_chksum>>8);	//chksum MSB
+ 226              	v	r1, #0
+ 227 019c B030DCE1 		strb	r1, [r3, #0]
+ 228 01a0 2334A0E1 		.loc 1 171 0
+ 229 01a4 2930C5E5 		strb	r0, [r5, #40]
+ 173:LL_HL_comm.c  **** 
+ 174:LL_HL_comm.c  **** 	SPIWR_num_bytes=42;
+ 230              	c 1 176 0
+ 231 01a8 8C309FE5 		ldmfd	sp!, {r4, r5, lr}
+ 232 01ac 2A20A0E3 		bx	lr
+ 233 01b0 002083E5 	.LVL6:
+ 175:LL_HL_comm.c  **** 	data_sent_to_LL=0;
+ 234              	:
+ 235 01b4 84309FE5 		.loc 1 160 0
+ 236 01b8 0010A0E3 		ldrb	r2, [r0], #1	@ zero_extendqisi2
+ 237 01bc 0010C3E5 		.loc 1 161 0
+ 238              		ldrh	r3, [ip, #0]
+ 239 01c0 2800C5E5 		add	r3, r3, r2
+ 176:LL_HL_comm.c  **** }
+ 240              	3, r3, asl #16
+ 241 01c4 3040BDE8 		mov	r3, r3, lsr #16
+ 242 01c8 1EFF2FE1 		.loc 1 158 0
+ 243              		cmp	r0, lr
+ 244              		.loc 1 160 0
+ 245              		strb	r2, [r1, #2]
+ 246 01cc 0120D0E4 		.loc 1 161 0
+ 247              		strh	r3, [ip, #0]	@ movhi
+ 248 01d0 B030DCE1 		add	r1, r1, #1
+ 249 01d4 023083E0 		.loc 1 158 0
+ 250 01d8 0338A0E1 		bne	.L24
+ 251 01dc 2338A0E1 		ldr	lr, .L32+4
+ 252              		add	r4, r0, #37
+ 253 01e0 0E0050E1 		add	r1, r0, #19
+ 254              	.L26:
+ 255 01e4 0220C1E5 		.loc 1 166 0
+ 256              		ldrb	r2, [r1, #-1]	@ zero_extendqisi2
+ 257 01e8 B030CCE1 		.loc 1 167 0
+ 258 01ec 011081E2 		ldrh	r3, [ip, #0]
+ 259              		add	r3, r3, r2
+ 260 01f0 F5FFFF1A 		mov	r3, r3, asl #16
+ 261 01f4 38E09FE5 		add	r1, r1, #1
+ 262 01f8 254080E2 		mov	r3, r3, lsr #16
+ 263 01fc 131080E2 		.loc 1 164 0
+ 264              		cmp	r1, r4
+ 265              		.loc 1 166 0
+ 266 0200 012051E5 		strb	r2, [lr, #22]
+ 267              		.loc 1 167 0
+ 268 0204 B030DCE1 		strh	r3, [ip, #0]	@ movhi
+ 269 0208 023083E0 		add	lr, lr, #1
+ 270 020c 0338A0E1 		.loc 1 164 0
+ 271 0210 011081E2 		bne	.L26
+ 272 0214 2338A0E1 		b	.L23
+ 273              	.L33:
+ 274 0218 040051E1 		.align	2
+ 275              	.L32:
+ 276 021c 1620CEE5 		.word	spi_chksum.1621
+ 277              		.word	SPIWRData
+ 278 0220 B030CCE1 		.word	LL_1khz_control_input
+ 279 0224 01E08EE2 		.word	SPIWR_num_bytes
+ 280              		.word	data_sent_to_LL
+ 281 0228 F4FFFF1A 	.LFE4:
+ 283              		.align	2
+ 284              		.global	HL2LL_write_cycle
+ 286 0230 0A000000 	HL2LL_write_cycle:
+ 287 0234 00000000 	.LFB3:
+ 288 0238 00000000 		.loc 1 55 0
+ 289 023c 00000000 		@ Function supports interworking.
+ 290 0240 00000000 		@ args = 0, pretend = 0, frame = 0
+ 291              		@ frame_needed = 0, uses_anonymous_args = 0
+ 292              		stmfd	sp!, {r4, r5, r6, r7, lr}
+ 293              	.LCFI2:
+ 294              		.loc 1 58 0
+ 295              		ldr	r3, .L50
+ 296              		ldrb	r0, [r3, #0]	@ zero_extendqisi2
+ 297              		cmp	r0, #0
+ 298              		beq	.L37
+ 299              		.loc 1 64 0
+ 300              		ldr	r3, .L50+4
+ 301              		.loc 1 61 0
+ 302 0244 F0402DE9 		ldr	r7, .L50+8
+ 303              		.loc 1 64 0
+ 304              		ldr	r2, [r3, #0]
+ 305 0248 A8319FE5 		.loc 1 61 0
+ 306 024c 0000D3E5 		ldrb	r6, [r7, #0]	@ zero_extendqisi2
+ 307 0250 000050E3 		ldr	r5, .L50+12
+ 308 0254 3700000A 		.loc 1 64 0
+ 309              		cmp	r2, #0
+ 310 0258 9C319FE5 		.loc 1 67 0
+ 311              		ldr	r2, .L50+16
+ 312 025c 9C719FE5 		.loc 1 64 0
+ 313              		orrne	r3, r6, #8
+ 314 0260 002093E5 		.loc 1 61 0
+ 315              		strh	r6, [r5, #0]	@ movhi
+ 316 0264 0060D7E5 		.loc 1 64 0
+ 317 0268 94519FE5 		strneh	r3, [r5, #0]	@ movhi
+ 318              		.loc 1 67 0
+ 319 026c 000052E3 		ldrb	r3, [r2, #1]	@ zero_extendqisi2
+ 320              		cmp	r3, #0
+ 321 0270 90219FE5 		ldrneh	r3, [r5, #0]
+ 322              		.loc 1 68 0
+ 323 0274 08308613 		ldreqh	r3, [r5, #0]
+ 324              		.loc 1 67 0
+ 325 0278 B060C5E1 		orrne	r3, r3, #16
+ 326              		.loc 1 68 0
+ 327 027c B030C511 		biceq	r3, r3, #16
+ 328              		.loc 1 67 0
+ 329 0280 0130D2E5 		strneh	r3, [r5, #0]	@ movhi
+ 330 0284 000053E3 		.loc 1 68 0
+ 331 0288 B030D511 		streqh	r3, [r5, #0]	@ movhi
+ 332              		.loc 1 70 0
+ 333 028c B030D501 		ldrb	r3, [r2, #0]	@ zero_extendqisi2
+ 334              		cmp	r3, #1
+ 335 0290 10308313 		beq	.L49
+ 336              		.loc 1 71 0
+ 337 0294 1030C303 		ldrh	r3, [r5, #0]
+ 338              		.loc 1 79 0
+ 339 0298 B030C511 		ldr	r2, .L50+20
+ 340              		.loc 1 71 0
+ 341 029c B030C501 		bic	r3, r3, #32
+ 342              		strh	r3, [r5, #0]	@ movhi
+ 343 02a0 0030D2E5 		.loc 1 83 0
+ 344 02a4 010053E3 		ldrh	r3, [r2, #6]
+ 345 02a8 3A00000A 		.loc 1 79 0
+ 346              		ldrh	lr, [r2, #8]
+ 347 02ac B030D5E1 		.loc 1 80 0
+ 348              		ldrh	r1, [r2, #0]
+ 349 02b0 54219FE5 		.loc 1 83 0
+ 350              		strh	r3, [r5, #10]	@ movhi
+ 351 02b4 2030C3E3 		.loc 1 81 0
+ 352 02b8 B030C5E1 		ldrh	r3, [r2, #2]
+ 353              		.loc 1 82 0
+ 354 02bc B630D2E1 		ldrh	r2, [r2, #4]
+ 355              		.loc 1 79 0
+ 356 02c0 B8E0D2E1 		strh	lr, [r5, #2]	@ movhi
+ 357              		.loc 1 80 0
+ 358 02c4 B010D2E1 		strh	r1, [r5, #4]	@ movhi
+ 359              		.loc 1 81 0
+ 360 02c8 BA30C5E1 		strh	r3, [r5, #6]	@ movhi
+ 361              		.loc 1 82 0
+ 362 02cc B230D2E1 		strh	r2, [r5, #8]	@ movhi
+ 363              	.L45:
+ 364 02d0 B420D2E1 		.loc 1 98 0
+ 365              		cmp	r6, #0
+ 366 02d4 B2E0C5E1 		bne	.L46
+ 367              		.loc 1 101 0
+ 368 02d8 B410C5E1 		ldr	r3, .L50+24
+ 369              		ldr	r2, [r3, #0]
+ 370 02dc B630C5E1 		.loc 1 102 0
+ 371              		ldmib	r3, {r1, ip}	@ phole ldm
+ 372 02e0 B820C5E1 		.loc 1 107 0
+ 373              		ldrh	lr, [r3, #40]
+ 374              		.loc 1 101 0
+ 375 02e4 000056E3 		str	r2, [r5, #20]
+ 376 02e8 1400001A 		.loc 1 102 0
+ 377              		str	r1, [r5, #24]
+ 378 02ec 1C319FE5 		.loc 1 105 0
+ 379 02f0 002093E5 		ldrh	r2, [r3, #16]
+ 380              		.loc 1 104 0
+ 381 02f4 021093E9 		ldrh	r1, [r3, #12]
+ 382              		.loc 1 106 0
+ 383 02f8 B8E2D3E1 		ldrh	r3, [r3, #20]
+ 384              		.loc 1 110 0
+ 385 02fc 142085E5 		mov	r0, r6
+ 386              		.loc 1 106 0
+ 387 0300 181085E5 		strh	r3, [r5, #46]	@ movhi
+ 388              		.loc 1 107 0
+ 389 0304 B021D3E1 		strh	lr, [r5, #36]	@ movhi
+ 390              		.loc 1 103 0
+ 391 0308 BC10D3E1 		str	ip, [r5, #28]
+ 392              		.loc 1 104 0
+ 393 030c B431D3E1 		strh	r1, [r5, #32]	@ movhi
+ 394              		.loc 1 105 0
+ 395 0310 0600A0E1 		strh	r2, [r5, #34]	@ movhi
+ 396              		.loc 1 110 0
+ 397 0314 BE32C5E1 		bl	LL_write_ctrl_data
+ 398              		.loc 1 112 0
+ 399 0318 B4E2C5E1 		mov	r3, #1
+ 400              		strb	r3, [r7, #0]
+ 401 031c 1CC085E5 		mov	r0, r3
+ 402              	.L37:
+ 403 0320 B012C5E1 		.loc 1 132 0
+ 404              		ldmfd	sp!, {r4, r5, r6, r7, lr}
+ 405 0324 B222C5E1 		bx	lr
+ 406              	.L46:
+ 407 0328 FEFFFFEB 		.loc 1 117 0
+ 408              		ldr	r3, .L50+24
+ 409 032c 0130A0E3 		.loc 1 121 0
+ 410 0330 0030C7E5 		ldr	r2, .L50+28
+ 411 0334 0300A0E1 		.loc 1 120 0
+ 412              		ldrh	lr, [r3, #36]
+ 413              		.loc 1 122 0
+ 414 0338 F040BDE8 		ldrh	r1, [r2, #2]
+ 415 033c 1EFF2FE1 		.loc 1 120 0
+ 416              		strh	lr, [r5, #44]	@ movhi
+ 417              		.loc 1 122 0
+ 418 0340 C8309FE5 		strh	r1, [r5, #50]	@ movhi
+ 419              		.loc 1 117 0
+ 420 0344 C8209FE5 		ldrh	lr, [r3, #24]
+ 421              		.loc 1 118 0
+ 422 0348 B4E2D3E1 		ldrh	r1, [r3, #28]
+ 423              		.loc 1 121 0
+ 424 034c B210D2E1 		ldrh	r2, [r2, #0]
+ 425              		.loc 1 119 0
+ 426 0350 BCE2C5E1 		ldrh	r3, [r3, #32]
+ 427              		.loc 1 123 0
+ 428 0354 B213C5E1 		mov	r4, #0	@ movhi
+ 429              		.loc 1 127 0
+ 430 0358 B8E1D3E1 		mov	r0, r6
+ 431              		.loc 1 124 0
+ 432 035c BC11D3E1 		strh	r4, [r5, #54]	@ movhi
+ 433              		.loc 1 117 0
+ 434 0360 B020D2E1 		strh	lr, [r5, #38]	@ movhi
+ 435              		.loc 1 118 0
+ 436 0364 B032D3E1 		strh	r1, [r5, #40]	@ movhi
+ 437              		.loc 1 119 0
+ 438 0368 0040A0E3 		strh	r3, [r5, #42]	@ movhi
+ 439              		.loc 1 121 0
+ 440 036c 0600A0E1 		strh	r2, [r5, #48]	@ movhi
+ 441              		.loc 1 123 0
+ 442 0370 B643C5E1 		strh	r4, [r5, #52]	@ movhi
+ 443              		.loc 1 127 0
+ 444 0374 B6E2C5E1 		bl	LL_write_ctrl_data
+ 445              		.loc 1 129 0
+ 446 0378 B812C5E1 		mov	r0, #1
+ 447              		strb	r4, [r7, #0]
+ 448 037c BA32C5E1 		b	.L37
+ 449              	.L49:
+ 450 0380 B023C5E1 		.loc 1 70 0
+ 451              		ldrh	r2, [r5, #0]
+ 452 0384 B443C5E1 		.loc 1 87 0
+ 453              		ldr	r3, .L50+32
+ 454 0388 FEFFFFEB 		.loc 1 79 0
+ 455              		ldr	r1, .L50+20
+ 456 038c 0100A0E3 		.loc 1 70 0
+ 457 0390 0040C7E5 		orr	r2, r2, #32
+ 458 0394 E7FFFFEA 		.loc 1 89 0
+ 459              		ldrb	lr, [r3, #2]	@ zero_extendqisi2
+ 460              		.loc 1 70 0
+ 461 0398 B020D5E1 		strh	r2, [r5, #0]	@ movhi
+ 462              		.loc 1 83 0
+ 463 039c 74309FE5 		ldrh	r2, [r1, #6]
+ 464              		.loc 1 90 0
+ 465 03a0 64109FE5 		ldrb	r4, [r3, #3]	@ zero_extendqisi2
+ 466              		.loc 1 87 0
+ 467 03a4 202082E3 		ldrb	r0, [r3, #0]	@ zero_extendqisi2
+ 468              		.loc 1 88 0
+ 469 03a8 02E0D3E5 		ldrb	ip, [r3, #1]	@ zero_extendqisi2
+ 470              		.loc 1 83 0
+ 471 03ac B020C5E1 		strh	r2, [r5, #10]	@ movhi
+ 472              		.loc 1 79 0
+ 473 03b0 B620D1E1 		ldrh	r3, [r1, #8]
+ 474              		.loc 1 81 0
+ 475 03b4 0340D3E5 		ldrh	r2, [r1, #2]
+ 476              		.loc 1 89 0
+ 477 03b8 0000D3E5 		strb	lr, [r5, #14]
+ 478              		.loc 1 80 0
+ 479 03bc 01C0D3E5 		ldrh	lr, [r1, #0]
+ 480              		.loc 1 82 0
+ 481 03c0 BA20C5E1 		ldrh	r1, [r1, #4]
+ 482              		.loc 1 87 0
+ 483 03c4 B830D1E1 		strb	r0, [r5, #12]
+ 484              		.loc 1 88 0
+ 485 03c8 B220D1E1 		strb	ip, [r5, #13]
+ 486              		.loc 1 90 0
+ 487 03cc 0EE0C5E5 		strb	r4, [r5, #15]
+ 488              		.loc 1 79 0
+ 489 03d0 B0E0D1E1 		strh	r3, [r5, #2]	@ movhi
+ 490              		.loc 1 80 0
+ 491 03d4 B410D1E1 		strh	lr, [r5, #4]	@ movhi
+ 492              		.loc 1 81 0
+ 493 03d8 0C00C5E5 		strh	r2, [r5, #6]	@ movhi
+ 494              		.loc 1 82 0
+ 495 03dc 0DC0C5E5 		strh	r1, [r5, #8]	@ movhi
+ 496              		b	.L45
+ 497 03e0 0F40C5E5 	.L51:
+ 498              		.align	2
+ 499 03e4 B230C5E1 	.L50:
+ 500              		.word	data_sent_to_LL
+ 501 03e8 B4E0C5E1 		.word	gpsDataOkTrigger
+ 502              		.word	pageselect.1570
+ 503 03ec B620C5E1 		.word	LL_1khz_control_input
+ 504              		.word	WO_SDK
+ 505 03f0 B810C5E1 		.word	WO_CTRL_Input
+ 506 03f4 BAFFFFEA 		.word	GPS_Data
+ 507              		.word	HL_Status
+ 508              		.word	WO_Direct_Motor_Control
+ 509              	.LFE3:
+ 511 03fc 00000000 		.align	2
+ 512 0400 0C000000 		.global	SSP_rx_handler_HL
+ 514 0408 00000000 	SSP_rx_handler_HL:
+ 515 040c 00000000 	.LFB5:
+ 516 0410 00000000 		.loc 1 180 0
+ 517 0414 00000000 		@ Function supports interworking.
+ 518 0418 00000000 		@ args = 0, pretend = 0, frame = 0
+ 519              		@ frame_needed = 0, uses_anonymous_args = 0
+ 520              	.LVL7:
+ 521              		stmfd	sp!, {r4, r5, r6, r7, lr}
+ 522              	.LCFI3:
+ 523              		.loc 1 187 0
+ 524              		ldr	r2, .L96
+ 525              		ldrb	r3, [r2, #0]	@ zero_extendqisi2
+ 177:LL_HL_comm.c  **** 
+ 178:LL_HL_comm.c  **** 
+ 179:LL_HL_comm.c  **** inline void SSP_rx_handler_HL(unsigned char SPI_rxdata)	//rx_handler @ high-level processor
+ 180:LL_HL_comm.c  **** {
+ 526              	#255
+ 527              		.loc 1 187 0
+ 528              		mov	r4, r2
+ 529              		bne	.L53
+ 530              		.loc 1 189 0
+ 531 041c F0402DE9 		cmp	r0, #62
+ 532              		beq	.L89
+ 181:LL_HL_comm.c  **** 	static volatile unsigned char SPI_syncstate=0;
+ 182:LL_HL_comm.c  **** 	static volatile unsigned char SPI_rxcount=0;
+ 183:LL_HL_comm.c  **** 	static volatile unsigned char *SPI_rxptr;
+ 184:LL_HL_comm.c  **** 	static volatile unsigned char incoming_page;
+ 185:LL_HL_comm.c  **** 
+ 186:LL_HL_comm.c  ****         //receive handler
+ 187:LL_HL_comm.c  ****         if (SPI_syncstate==0)
+ 533              	.loc 1 226 0
+ 534 0420 64229FE5 		strb	r3, [r2, #0]
+ 535 0424 0030D2E5 	.LVL8:
+ 536 0428 FF3003E2 	.L83:
+ 537 042c 000053E3 		.loc 1 227 0
+ 538              		ldmfd	sp!, {r4, r5, r6, r7, lr}
+ 539 0430 FF0000E2 		bx	lr
+ 540              	.LVL9:
+ 541 0434 0240A0E1 	.L53:
+ 542 0438 0400001A 		.loc 1 191 0
+ 188:LL_HL_comm.c  **** 		{
+ 189:LL_HL_comm.c  **** 			if (SPI_rxdata=='>') SPI_syncstate++; else SPI_syncstate=0;
+ 543              	[r2, #0]	@ zero_extendqisi2
+ 544 043c 3E0050E3 		cmp	r3, #1
+ 545 0440 1100000A 		beq	.L90
+ 546              		.loc 1 201 0
+ 190:LL_HL_comm.c  **** 		}
+ 191:LL_HL_comm.c  **** 		else if (SPI_syncstate==1)
+ 192:LL_HL_comm.c  **** 		{
+ 193:LL_HL_comm.c  **** 			if (SPI_rxdata=='*')
+ 194:LL_HL_comm.c  **** 			{
+ 195:LL_HL_comm.c  **** 				SPI_syncstate++;
+ 196:LL_HL_comm.c  **** 				SPI_rxptr=(unsigned char *)&LL_1khz_attitude_data;
+ 197:LL_HL_comm.c  **** 				SPI_rxcount=40;
+ 198:LL_HL_comm.c  **** 			}
+ 199:LL_HL_comm.c  **** 			else SPI_syncstate=0;
+ 200:LL_HL_comm.c  **** 		}
+ 201:LL_HL_comm.c  **** 		else if (SPI_syncstate==2)
+ 202:LL_HL_comm.c  **** 		{
+ 203:LL_HL_comm.c  **** 			if(SPI_rxcount==26) //14 bytes transmitted => select 500Hz page
+ 204:LL_HL_comm.c  **** 			{
+ 205:LL_HL_comm.c  **** 				incoming_page=LL_1khz_attitude_data.system_flags&0x03;	//system flags were already received
+ 206:LL_HL_comm.c  **** 				if(incoming_page==1) SPI_rxptr+=26;
+ 207:LL_HL_comm.c  **** 				else if(incoming_page==2) SPI_rxptr+=52;
+ 208:LL_HL_comm.c  **** 			}
+ 209:LL_HL_comm.c  **** 			SPI_rxcount--;
+ 210:LL_HL_comm.c  **** 			*SPI_rxptr=SPI_rxdata;
+ 211:LL_HL_comm.c  **** 			SPI_rxptr++;
+ 212:LL_HL_comm.c  **** 			if (SPI_rxcount==0)
+ 213:LL_HL_comm.c  ****         	{
+ 214:LL_HL_comm.c  ****              	SPI_syncstate++;
+ 215:LL_HL_comm.c  ****         	}
+ 216:LL_HL_comm.c  **** 		}
+ 217:LL_HL_comm.c  **** 		else if (SPI_syncstate==3)
+ 218:LL_HL_comm.c  **** 		{
+ 219:LL_HL_comm.c  **** 			if(SPI_rxdata=='<')	//last byte ok => data should be valid
+ 220:LL_HL_comm.c  **** 			{
+ 221:LL_HL_comm.c  **** 				SSP_data_distribution_HL();	//only distribute data to other structs, if it was received correct
+ 222:LL_HL_comm.c  **** 											//ack data receiption
+ 223:LL_HL_comm.c  **** 			}
+ 224:LL_HL_comm.c  **** 			SPI_syncstate=0;
+ 225:LL_HL_comm.c  **** 		}
+ 226:LL_HL_comm.c  **** 		else SPI_syncstate=0;
+ 547              	b	r3, [r2, #0]	@ zero_extendqisi2
+ 548 0444 0030C2E5 		cmp	r3, #2
+ 549              		beq	.L91
+ 550              		.loc 1 217 0
+ 227:LL_HL_comm.c  **** }
+ 551              	b	r3, [r2, #0]	@ zero_extendqisi2
+ 552 0448 F040BDE8 		cmp	r3, #3
+ 553 044c 1EFF2FE1 		.loc 1 226 0
+ 554              		movne	r3, #0
+ 555              		.loc 1 217 0
+ 556              		bne	.L88
+ 557 0450 0030D2E5 		.loc 1 219 0
+ 558 0454 010053E3 		cmp	r0, #60
+ 559 0458 1000000A 		beq	.L92
+ 560              	.LVL10:
+ 561 045c 0030D2E5 	.L72:
+ 562 0460 020053E3 		.loc 1 224 0
+ 563 0464 1C00000A 		mov	r3, #0
+ 564              		strb	r3, [r4, #0]
+ 565 0468 0030D2E5 		b	.L83
+ 566 046c 030053E3 	.LVL11:
+ 567              	.L89:
+ 568 0470 0030A013 		.loc 1 189 0
+ 569              		ldrb	r3, [r2, #0]	@ zero_extendqisi2
+ 570 0474 F2FFFF1A 		add	r3, r3, #1
+ 571              		and	r3, r3, #255
+ 572 0478 3C0050E3 		strb	r3, [r2, #0]
+ 573 047c 3900000A 		b	.L83
+ 574              	.L90:
+ 575              		.loc 1 193 0
+ 576              		cmp	r0, #42
+ 577 0480 0030A0E3 		.loc 1 199 0
+ 578 0484 0030C4E5 		movne	r3, #0
+ 579 0488 EEFFFFEA 		strneb	r3, [r2, #0]
+ 580              		.loc 1 193 0
+ 581              		bne	.L83
+ 582              		.loc 1 195 0
+ 583 048c 0030D2E5 		ldrb	r3, [r2, #0]	@ zero_extendqisi2
+ 584 0490 013083E2 		add	r3, r3, #1
+ 585 0494 FF3003E2 		and	r3, r3, #255
+ 586 0498 0030C2E5 		strb	r3, [r2, #0]
+ 587 049c E9FFFFEA 		.loc 1 196 0
+ 588              		ldr	r3, .L96+4
+ 589              		ldr	r2, .L96+8
+ 590 04a0 2A0050E3 		str	r2, [r3, #0]
+ 591              		.loc 1 197 0
+ 592 04a4 0030A013 		ldr	r3, .L96+12
+ 593 04a8 0030C215 		mov	r1, #40
+ 594              		strb	r1, [r3, #0]
+ 595 04ac E5FFFF1A 		b	.L83
+ 596              	.L91:
+ 597 04b0 0030D2E5 		.loc 1 203 0
+ 598 04b4 013083E2 		ldr	ip, .L96+12
+ 599 04b8 FF3003E2 		ldrb	r3, [ip, #0]	@ zero_extendqisi2
+ 600 04bc 0030C2E5 		cmp	r3, #26
+ 601              		beq	.L93
+ 602 04c0 C8319FE5 	.L85:
+ 603 04c4 C8219FE5 		ldr	r1, .L96+4
+ 604 04c8 002083E5 	.L64:
+ 605              		.loc 1 209 0
+ 606 04cc C4319FE5 		ldrb	r3, [ip, #0]	@ zero_extendqisi2
+ 607 04d0 2810A0E3 		.loc 1 210 0
+ 608 04d4 0010C3E5 		ldr	r2, [r1, #0]
+ 609 04d8 DAFFFFEA 		.loc 1 209 0
+ 610              		sub	r3, r3, #1
+ 611              		and	r3, r3, #255
+ 612 04dc B4C19FE5 		strb	r3, [ip, #0]
+ 613 04e0 0030DCE5 		.loc 1 210 0
+ 614 04e4 1A0053E3 		strb	r0, [r2], #1
+ 615 04e8 0E00000A 		.loc 1 212 0
+ 616              		ldrb	r3, [ip, #0]	@ zero_extendqisi2
+ 617 04ec 9C119FE5 		cmp	r3, #0
+ 618              		.loc 1 211 0
+ 619              		str	r2, [r1, #0]
+ 620 04f0 0030DCE5 		.loc 1 212 0
+ 621              		.loc 1 214 0
+ 622 04f4 002091E5 		ldreqb	r3, [r4, #0]	@ zero_extendqisi2
+ 623              		addeq	r3, r3, #1
+ 624 04f8 013043E2 		andeq	r3, r3, #255
+ 625 04fc FF3003E2 		streqb	r3, [r4, #0]
+ 626 0500 0030CCE5 		b	.L83
+ 627              	.L93:
+ 628 0504 0100C2E4 		.loc 1 205 0
+ 629              		ldr	r3, .L96+8
+ 630 0508 0030DCE5 		ldrh	r2, [r3, #0]
+ 631 050c 000053E3 		ldr	r1, .L96+16
+ 632              		and	r2, r2, #3
+ 633 0510 002081E5 		strb	r2, [r1, #0]
+ 634              		.loc 1 206 0
+ 635              		ldrb	r3, [r1, #0]	@ zero_extendqisi2
+ 636 0514 0030D405 		cmp	r3, #1
+ 637 0518 01308302 		beq	.L94
+ 638 051c FF300302 		.loc 1 207 0
+ 639 0520 0030C405 		ldrb	r3, [r1, #0]	@ zero_extendqisi2
+ 640 0524 C7FFFFEA 		cmp	r3, #2
+ 641              		bne	.L85
+ 642              		ldr	r1, .L96+4
+ 643 0528 64319FE5 		ldr	r3, [r1, #0]
+ 644 052c B020D3E1 		add	r3, r3, #52
+ 645 0530 64119FE5 		str	r3, [r1, #0]
+ 646 0534 032002E2 		b	.L64
+ 647 0538 0020C1E5 	.L92:
+ 648              	.LBB4:
+ 649 053c 0030D1E5 	.LBB5:
+ 650 0540 010053E3 		.loc 1 19 0
+ 651 0544 4600000A 		ldr	r6, .L96+8
+ 652              		ldrh	r3, [r6, #0]
+ 653 0548 0030D1E5 		.loc 1 21 0
+ 654 054c 020053E3 		tst	r3, #8
+ 655 0550 E5FFFF1A 		.loc 1 19 0
+ 656 0554 34119FE5 		and	r7, r3, #3
+ 657 0558 003091E5 	.LVL12:
+ 658 055c 343083E2 		.loc 1 21 0
+ 659 0560 003081E5 		ldrne	r3, .L96+20
+ 660 0564 E1FFFFEA 		movne	r2, #0
+ 661              		strne	r2, [r3, #0]
+ 662              		.loc 1 25 0
+ 663              		ldrh	r1, [r6, #6]
+ 664              		.loc 1 23 0
+ 665 0568 24619FE5 		ldrsh	r3, [r6, #2]
+ 666 056c B030D6E1 		.loc 1 24 0
+ 667              		ldrsh	r2, [r6, #4]
+ 668 0570 080013E3 		.loc 1 23 0
+ 669              		ldr	r5, .L96+24
+ 670 0574 037003E2 		.loc 1 29 0
+ 671              		ldrsh	lr, [r6, #12]
+ 672              		.loc 1 23 0
+ 673 0578 20319F15 		add	r3, r3, r3, asl #2
+ 674 057c 0020A013 		.loc 1 24 0
+ 675 0580 00208315 		add	r2, r2, r2, asl #2
+ 676              		.loc 1 25 0
+ 677 0584 B610D6E1 		add	r1, r1, r1, asl #2
+ 678              		.loc 1 27 0
+ 679 0588 F230D6E1 		ldrsh	r0, [r6, #8]
+ 680              	.LVL13:
+ 681 058c F420D6E1 		.loc 1 28 0
+ 682              		ldrsh	ip, [r6, #10]
+ 683 0590 0C519FE5 		.loc 1 23 0
+ 684              		mov	r3, r3, asl #1
+ 685 0594 FCE0D6E1 		.loc 1 24 0
+ 686              		mov	r2, r2, asl #1
+ 687 0598 033183E0 		.loc 1 25 0
+ 688              		mov	r1, r1, asl #1
+ 689 059c 022182E0 		.loc 1 31 0
+ 690              		cmp	r7, #0
+ 691 05a0 011181E0 		.loc 1 29 0
+ 692              		str	lr, [r5, #20]
+ 693 05a4 F800D6E1 		.loc 1 23 0
+ 694              		str	r3, [r5, #0]
+ 695              		.loc 1 24 0
+ 696 05a8 FAC0D6E1 		str	r2, [r5, #4]
+ 697              		.loc 1 25 0
+ 698 05ac 8330A0E1 		str	r1, [r5, #8]
+ 699              		.loc 1 27 0
+ 700 05b0 8220A0E1 		str	r0, [r5, #12]
+ 701              		.loc 1 28 0
+ 702 05b4 8110A0E1 		str	ip, [r5, #16]
+ 703              		.loc 1 23 0
+ 704 05b8 000057E3 		mov	lr, r5
+ 705              		.loc 1 31 0
+ 706 05bc 14E085E5 		bne	.L76
+ 707              		ldr	r1, .L96+28
+ 708 05c0 003085E5 		mov	r2, r6
+ 709              		add	r0, r6, #8
+ 710 05c4 042085E5 		mov	ip, r6
+ 711              	.L78:
+ 712 05c8 081085E5 		.loc 1 35 0
+ 713              		ldrb	r3, [r2, #14]	@ zero_extendqisi2
+ 714 05cc 0C0085E5 		add	r2, r2, #1
+ 715              		mov	r3, r3, asl #4
+ 716 05d0 10C085E5 		.loc 1 33 0
+ 717              		cmp	r2, r0
+ 718 05d4 05E0A0E1 		.loc 1 35 0
+ 719              		strh	r3, [r1], #2	@ movhi
+ 720 05d8 1600001A 		.loc 1 33 0
+ 721 05dc C4109FE5 		bne	.L78
+ 722 05e0 0620A0E1 		.loc 1 39 0
+ 723 05e4 080086E2 		ldrsh	r3, [ip, #36]
+ 724 05e8 06C0A0E1 		.loc 1 37 0
+ 725              		ldrsh	r2, [ip, #32]
+ 726              		.loc 1 38 0
+ 727 05ec 0E30D2E5 		ldrsh	r1, [ip, #34]
+ 728 05f0 012082E2 		.loc 1 37 0
+ 729 05f4 0332A0E1 		add	r2, r2, r2, asl #2
+ 730              		.loc 1 38 0
+ 731 05f8 000052E1 		add	r1, r1, r1, asl #2
+ 732              		.loc 1 39 0
+ 733 05fc B230C1E0 		add	r3, r3, r3, asl #2
+ 734              		.loc 1 37 0
+ 735 0600 F9FFFF1A 		mov	r2, r2, asl #1
+ 736              		.loc 1 38 0
+ 737 0604 F432DCE1 		mov	r1, r1, asl #1
+ 738              		.loc 1 39 0
+ 739 0608 F022DCE1 		mov	r3, r3, asl #1
+ 740              		strh	r3, [lr, #28]	@ movhi
+ 741 060c F212DCE1 		.loc 1 37 0
+ 742              		strh	r2, [lr, #24]	@ movhi
+ 743 0610 022182E0 		.loc 1 38 0
+ 744              		strh	r1, [lr, #26]	@ movhi
+ 745 0614 011181E0 		b	.L72
+ 746              	.L76:
+ 747 0618 033183E0 		.loc 1 41 0
+ 748              		cmp	r7, #1
+ 749 061c 8220A0E1 		beq	.L95
+ 750              		.loc 1 46 0
+ 751 0620 8110A0E1 		cmp	r7, #2
+ 752              		bne	.L72
+ 753 0624 8330A0E1 		.loc 1 50 0
+ 754 0628 BC31CEE1 		ldrsh	r3, [r6, #70]
+ 755              		.loc 1 48 0
+ 756 062c B821CEE1 		ldrsh	r2, [r6, #66]
+ 757              		.loc 1 49 0
+ 758 0630 BA11CEE1 		ldrsh	r1, [r6, #68]
+ 759 0634 91FFFFEA 		.loc 1 50 0
+ 760              		str	r3, [r5, #56]
+ 761              		.loc 1 48 0
+ 762 0638 010057E3 		str	r2, [r5, #48]
+ 763 063c 0D00000A 		.loc 1 49 0
+ 764              		str	r1, [r5, #52]
+ 765 0640 020057E3 		b	.L72
+ 766 0644 8DFFFF1A 	.LVL14:
+ 767              	.L94:
+ 768 0648 F634D6E1 	.LBE5:
+ 769              	.LBE4:
+ 770 064c F224D6E1 		.loc 1 206 0
+ 771              		ldr	r1, .L96+4
+ 772 0650 F414D6E1 		ldr	r3, [r1, #0]
+ 773              		add	r3, r3, #26
+ 774 0654 383085E5 		str	r3, [r1, #0]
+ 775              		b	.L64
+ 776 0658 302085E5 	.LVL15:
+ 777              	.L95:
+ 778 065c 341085E5 	.LBB6:
+ 779 0660 86FFFFEA 	.LBB7:
+ 780              		.loc 1 44 0
+ 781              		ldrsh	r3, [r6, #64]
+ 782              		.loc 1 43 0
+ 783              		ldr	r2, [r6, #60]
+ 784              		.loc 1 44 0
+ 785 0664 24109FE5 		str	r3, [r5, #80]
+ 786 0668 003091E5 		.loc 1 43 0
+ 787 066c 1A3083E2 		str	r2, [r5, #76]
+ 788 0670 003081E5 		b	.L72
+ 789 0674 9DFFFFEA 	.L97:
+ 790              		.align	2
+ 791              	.L96:
+ 792              		.word	SPI_syncstate.1655
+ 793              		.word	SPI_rxptr.1657
+ 794              		.word	LL_1khz_attitude_data
+ 795 0678 F034D6E1 		.word	SPI_rxcount.1656
+ 796              		.word	incoming_page.1658
+ 797 067c 3C2096E5 		.word	gpsDataOkTrigger
+ 798              		.word	IMU_CalcData
+ 799 0680 503085E5 		.word	RO_RC_Data
+ 800              	.LBE7:
+ 801 0684 4C2085E5 	.LBE6:
+ 802 0688 7CFFFFEA 	.LFE5:
+ 804              		.global	SSP_ack
+ 805              		.bss
+ 806 068c 09000000 		.align	1
+ 809 0698 08000000 	SSP_ack:
+ 810 069c 02000000 		.space	2
+ 811 06a0 00000000 	incoming_page.1658:
+ 812 06a4 00000000 		.space	1
+ 813 06a8 00000000 		.align	2
+ 814              	SPI_rxptr.1657:
+ 815              		.space	4
+ 816              	SPI_rxcount.1656:
+ 817              		.space	1
+ 818              	SPI_syncstate.1655:
+ 819              		.space	1
+ 820              		.align	1
+ 821              	spi_chksum.1621:
+ 822              		.space	2
+ 823              	pageselect.1570:
+ 824 0000 0000     		.space	1
+ 825              		.comm	GPS_timeout,4,4
+ 826 0002 00       		.comm	GPS_init_status,1,1
+ 827 0003 00       		.comm	LL_1khz_attitude_data,92,4
+ 828              		.comm	LL_1khz_control_input,56,4
+ 829 0004 00000000 		.comm	HLC_buffer,256,1
+ 830              		.section	.debug_frame,"",%progbits
+ 831 0008 00       	.Lframe0:
+ 832              		.4byte	.LECIE0-.LSCIE0
+ 833 0009 00       	.LSCIE0:
+ 834              		.4byte	0xffffffff
+ 835              		.byte	0x1
+ 836 000a 0000     		.ascii	"\000"
+ 837              		.uleb128 0x1
+ 838 000c 00       		.sleb128 -4
+ 839              		.byte	0xe
+ 840              		.byte	0xc
+ 841              		.uleb128 0xd
+ 842              		.uleb128 0x0
+ 843              		.align	2
+ 947              		.4byte	0x0
+DEFINED SYMBOLS
+                            *ABS*:00000000 LL_HL_comm.c
+C:\Users\Nacho\AppData\Local\Temp/ccOcaaaa.s:13     .text:00000000 SSP_data_distribution_HL
+C:\Users\Nacho\AppData\Local\Temp/ccOcaaaa.s:20     .text:00000000 $a
+C:\Users\Nacho\AppData\Local\Temp/ccOcaaaa.s:153    .text:00000118 $d
+                            *COM*:0000005c LL_1khz_attitude_data
+C:\Users\Nacho\AppData\Local\Temp/ccOcaaaa.s:162    .text:00000128 LL_write_ctrl_data
+C:\Users\Nacho\AppData\Local\Temp/ccOcaaaa.s:170    .text:00000128 $a
+C:\Users\Nacho\AppData\Local\Temp/ccOcaaaa.s:286    .text:00000230 $d
+C:\Users\Nacho\AppData\Local\Temp/ccOcaaaa.s:835    .bss:0000000a spi_chksum.1621
+                            *COM*:00000038 LL_1khz_control_input
+C:\Users\Nacho\AppData\Local\Temp/ccOcaaaa.s:296    .text:00000244 HL2LL_write_cycle
+C:\Users\Nacho\AppData\Local\Temp/ccOcaaaa.s:302    .text:00000244 $a
+C:\Users\Nacho\AppData\Local\Temp/ccOcaaaa.s:510    .text:000003f8 $d
+C:\Users\Nacho\AppData\Local\Temp/ccOcaaaa.s:837    .bss:0000000c pageselect.1570
+C:\Users\Nacho\AppData\Local\Temp/ccOcaaaa.s:524    .text:0000041c SSP_rx_handler_HL
+C:\Users\Nacho\AppData\Local\Temp/ccOcaaaa.s:531    .text:0000041c $a
+C:\Users\Nacho\AppData\Local\Temp/ccOcaaaa.s:806    .text:0000068c $d
+C:\Users\Nacho\AppData\Local\Temp/ccOcaaaa.s:832    .bss:00000009 SPI_syncstate.1655
+C:\Users\Nacho\AppData\Local\Temp/ccOcaaaa.s:828    .bss:00000004 SPI_rxptr.1657
+C:\Users\Nacho\AppData\Local\Temp/ccOcaaaa.s:830    .bss:00000008 SPI_rxcount.1656
+C:\Users\Nacho\AppData\Local\Temp/ccOcaaaa.s:825    .bss:00000002 incoming_page.1658
+C:\Users\Nacho\AppData\Local\Temp/ccOcaaaa.s:823    .bss:00000000 SSP_ack
+                            *COM*:00000004 GPS_timeout
+                            *COM*:00000001 GPS_init_status
+                            *COM*:00000100 HLC_buffer
+
+UNDEFINED SYMBOLS
+gpsDataOkTrigger
+IMU_CalcData
+RO_RC_Data
+SPIWRData
+SPIWR_num_bytes
+data_sent_to_LL
+WO_SDK
+WO_CTRL_Input
+GPS_Data
+HL_Status
+WO_Direct_Motor_Control

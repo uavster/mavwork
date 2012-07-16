@@ -1,0 +1,2128 @@
+   1              		.file	"sdk.c"
+   9              	.Ltext0:
+  10              		.align	2
+  11              		.global	HLC_Checksum
+  13              	HLC_Checksum:
+  14              	.LFB4:
+  15              		.file 1 "sdk.c"
+   1:sdk.c         **** #include "main.h"
+   2:sdk.c         **** #include "sdk.h"
+   3:sdk.c         **** #include "LL_HL_comm.h"
+   4:sdk.c         **** #include "uart.h"
+   5:sdk.c         **** #include "system.h"
+   6:sdk.c         **** #include "math.h"
+   7:sdk.c         **** #include "main.h"
+   8:sdk.c         **** 
+   9:sdk.c         **** #define G_CONSTANT	9806.7	// NACHO [mg]
+  10:sdk.c         **** 
+  11:sdk.c         **** struct WO_SDK_STRUCT WO_SDK;
+  12:sdk.c         **** struct WO_CTRL_INPUT WO_CTRL_Input;
+  13:sdk.c         **** struct RO_RC_DATA RO_RC_Data;
+  14:sdk.c         **** struct WO_DIRECT_MOTOR_CONTROL WO_Direct_Motor_Control;
+  15:sdk.c         **** 
+  16:sdk.c         **** /* SDK_mainloop(void) is triggered @ 1kHz.
+  17:sdk.c         ****  *
+  18:sdk.c         ****  * WO_(Write Only) data is written to the LL processor after
+  19:sdk.c         ****  * execution of this function.
+  20:sdk.c         ****  *
+  21:sdk.c         ****  * RO_(Read Only) data is updated before entering this function
+  22:sdk.c         ****  * and can be read to obtain information for supervision or control
+  23:sdk.c         ****  *
+  24:sdk.c         ****  * WO_ and RO_ structs are defined in sdk.h
+  25:sdk.c         ****  *
+  26:sdk.c         ****  * The struct LL_1khz_attitude_data (defined in LL_HL_comm.h) can
+  27:sdk.c         ****  * be used to read all sensor data, results of the data fusion
+  28:sdk.c         ****  * and R/C inputs transmitted from the LL-processor. This struct is
+  29:sdk.c         ****  * automatically updated at 1 kHz.
+  30:sdk.c         ****  * */
+  31:sdk.c         **** 
+  32:sdk.c         **** // COMPUTER VISION GROUP application; Charlie De Vivero 13-07-2010
+  33:sdk.c         **** // High-Level Communication Protocol (HL Com)
+  34:sdk.c         **** unsigned long	timeCount		= 0;				// time keeper (1 ms per LSB)
+  35:sdk.c         **** short			controlState	= HLC_START_SEQ;	// control protocol state machine - HL Com
+  36:sdk.c         **** char			verboseMode		= 0;				// verbose mode
+  37:sdk.c         **** unsigned short	packetSize		= 0;				// used to determine command packet size
+  38:sdk.c         **** unsigned short	byteIndex		= 0;				// used to process command packets
+  39:sdk.c         **** 
+  40:sdk.c         **** unsigned char	ctrlMode		= 0x00;
+  41:sdk.c         **** unsigned char	ctrlEnabled		= 0x00;
+  42:sdk.c         **** 
+  43:sdk.c         **** //test
+  44:sdk.c         **** char ch = 0;
+  45:sdk.c         **** 
+  46:sdk.c         **** long long x_vel = 0, y_vel = 0;	// NACHO
+  47:sdk.c         **** unsigned int lastTicks;	// NACHO
+  48:sdk.c         **** char firstTime = 1; // NACHO
+  49:sdk.c         **** short lastAccelX, lastAccelY; // NACHO
+  50:sdk.c         **** 
+  51:sdk.c         **** // *** //
+  52:sdk.c         **** 
+  53:sdk.c         **** unsigned int getSystemTicks();	// NACHO
+  54:sdk.c         **** 
+  55:sdk.c         **** void SDK_mainloop(void)
+  56:sdk.c         **** {
+  57:sdk.c         **** 
+  58:sdk.c         **** 	//WO_SDK.ctrl_mode=0x00;	//0x00: absolute angle and throttle control
+  59:sdk.c         **** 							//0x01: direct motor control: WO_Direct_Motor_Control
+  60:sdk.c         **** 							//		Please note that output mapping is done
+  61:sdk.c         **** 							//		directly on the motor controllers
+  62:sdk.c         **** 
+  63:sdk.c         **** 	//WO_SDK.ctrl_enabled=1;  //0: disable control by HL processor
+  64:sdk.c         **** 							//1: enable control by HL processor
+  65:sdk.c         **** 
+  66:sdk.c         **** /*	Example for WO_SDK.ctrl_mode=0x00; */
+  67:sdk.c         **** 
+  68:sdk.c         **** 	//WO_CTRL_Input.ctrl=0x08;	//0x08:enable throttle control only
+  69:sdk.c         **** 
+  70:sdk.c         **** 	//WO_CTRL_Input.thrust=(RO_RC_Data.channel[2]/2);	//use R/C throttle stick input /2 to control thr
+  71:sdk.c         **** 
+  72:sdk.c         **** 
+  73:sdk.c         **** /*	Example for WO_SDK.ctrl_mode=0x01;
+  74:sdk.c         ****  *
+  75:sdk.c         ****  *  Stick commands directly mapped to motors, NO attitude control!
+  76:sdk.c         ****  * */
+  77:sdk.c         **** 
+  78:sdk.c         **** 	/*WO_Direct_Motor_Control.pitch=RO_RC_Data.channel[0]/21;
+  79:sdk.c         **** 	WO_Direct_Motor_Control.roll=(4095-RO_RC_Data.channel[1])/21;
+  80:sdk.c         **** 	WO_Direct_Motor_Control.thrust=RO_RC_Data.channel[2]/21;
+  81:sdk.c         **** 	WO_Direct_Motor_Control.yaw=RO_RC_Data.channel[3]/21;*/
+  82:sdk.c         **** 
+  83:sdk.c         **** 	// ^^^Original Code^^^ //
+  84:sdk.c         **** 
+  85:sdk.c         **** 	// COMPUTER VISION GROUP; Charlie De Vivero 05-08-2010
+  86:sdk.c         **** 
+  87:sdk.c         **** 	WO_SDK.ctrl_mode	= ctrlMode;
+  88:sdk.c         **** 	WO_SDK.ctrl_enabled	= ctrlEnabled;
+  89:sdk.c         **** 
+  90:sdk.c         **** 	// ----------- NACHO: accelerations integration [start] -----------
+  91:sdk.c         **** 	// Compute the gravity contribution to the accelerometer measures and substract from the readings
+  92:sdk.c         **** 	double pitch = (LL_1khz_attitude_data.angle_pitch * M_PI) / (180.0 * 1000.0);	 	// Pelican pitch a
+  93:sdk.c         **** 	double roll = (LL_1khz_attitude_data.angle_roll * M_PI) / (180.0 * 1000.0);			// Pelican roll axis
+  94:sdk.c         **** 	double g_x = -G_CONSTANT * cos(roll) * sin(pitch);	// pitch > 0 -> g_x > 0 (translation to the pro
+  95:sdk.c         **** 	double g_y = G_CONSTANT * sin(roll);				// roll > 0 -> g_y < 0  (translation to the proxy Y axis)
+  96:sdk.c         **** 	// Accelerometer X readings are inverted to match the proxy reference frame
+  97:sdk.c         **** 	double currentAccelX = -LL_1khz_attitude_data.acc_x - g_x;
+  98:sdk.c         **** 	double currentAccelY = LL_1khz_attitude_data.acc_y - g_y;
+  99:sdk.c         **** 
+ 100:sdk.c         **** 	unsigned int currentTicks = getSystemTicks();
+ 101:sdk.c         **** 	if (!firstTime) {
+ 102:sdk.c         **** 		unsigned long long dt = currentTicks - lastTicks;
+ 103:sdk.c         **** 		x_vel += ((currentAccelX + lastAccelX) * 0.5) * dt;
+ 104:sdk.c         **** 		y_vel += ((currentAccelY + lastAccelY) * 0.5) * dt;
+ 105:sdk.c         **** 	} else {
+ 106:sdk.c         **** 		x_vel = 0;
+ 107:sdk.c         **** 		y_vel = 0;
+ 108:sdk.c         **** 		firstTime = 0;
+ 109:sdk.c         **** 	}
+ 110:sdk.c         **** 	lastTicks = currentTicks;
+ 111:sdk.c         **** 	lastAccelX = currentAccelX;
+ 112:sdk.c         **** 	lastAccelY = currentAccelY;
+ 113:sdk.c         **** 	// ----------- NACHO: accelerations integration [end] -----------
+ 114:sdk.c         **** 
+ 115:sdk.c         **** 	/*timeCount++;
+ 116:sdk.c         **** 
+ 117:sdk.c         **** 
+ 118:sdk.c         **** 
+ 119:sdk.c         **** 	if (timeCount > 1000) {
+ 120:sdk.c         **** 
+ 121:sdk.c         **** 
+ 122:sdk.c         **** 		HLC_Protocol(0);
+ 123:sdk.c         **** 		timeCount = 0;
+ 124:sdk.c         **** 		//controlState = 0;
+ 125:sdk.c         **** 
+ 126:sdk.c         **** 	}*/
+ 127:sdk.c         **** 	// *** //
+ 128:sdk.c         **** }
+ 129:sdk.c         **** 
+ 130:sdk.c         **** // COMPUTER VISION GROUP
+ 131:sdk.c         **** // Pelican Command Communications - HL Comm
+ 132:sdk.c         **** // Charlie De Vivero 2010
+ 133:sdk.c         **** void HLC_Protocol(char control) {
+ 134:sdk.c         **** 
+ 135:sdk.c         **** 	//printf(" hlc_PROTOCOL, %d \n\r", timeCount);
+ 136:sdk.c         **** 
+ 137:sdk.c         **** 	/*for (unsigned short i = 0; i < 256; i++) {
+ 138:sdk.c         **** 		printf("%c", HLC_buffer[i]);
+ 139:sdk.c         **** 	}
+ 140:sdk.c         **** 	printf("\n\r");*/ // test code
+ 141:sdk.c         **** 
+ 142:sdk.c         **** 
+ 143:sdk.c         **** 
+ 144:sdk.c         **** 
+ 145:sdk.c         **** 
+ 146:sdk.c         **** //	if (timeCount % 100 > 50) {
+ 147:sdk.c         **** 	//if (timeCount % 100 ==1) {
+ 148:sdk.c         **** 
+ 149:sdk.c         **** 		//printf(" Swithc control State 0X%x , control %c \n\r" ,controlState,control);
+ 150:sdk.c         **** 		switch (controlState) {
+ 151:sdk.c         **** 		case HLC_START_SEQ:
+ 152:sdk.c         **** 			//printf("%c start seq, 0x%x\n\r", control, controlState);
+ 153:sdk.c         **** 			if (control == '$')			controlState = HLC_REQ_SEQ1;
+ 154:sdk.c         **** 			else if (control == '#')	controlState = HLC_CMD_SEQ1;
+ 155:sdk.c         **** 			else						controlState = HLC_START_SEQ;
+ 156:sdk.c         **** 			break;
+ 157:sdk.c         **** 
+ 158:sdk.c         **** 		case HLC_REQ_SEQ1:
+ 159:sdk.c         **** 			//printf("%c req seq 1, 0x%x\n\r", control, controlState);
+ 160:sdk.c         **** 			if (control == '>')	controlState = HLC_REQ_SEQ2;
+ 161:sdk.c         **** 			else				controlState = HLC_START_SEQ;
+ 162:sdk.c         **** 			break;
+ 163:sdk.c         **** 
+ 164:sdk.c         **** 		case HLC_REQ_SEQ2:
+ 165:sdk.c         **** 			//printf("%c req seq 2, 0x%x\n\r", control, controlState);
+ 166:sdk.c         **** 			if (control == 'v' && verboseMode == 0) {
+ 167:sdk.c         **** 				controlState = HLC_REQ_SEQ2;
+ 168:sdk.c         **** 				verboseMode = 1;
+ 169:sdk.c         **** 			}
+ 170:sdk.c         **** 			else if (control == RC_DATA_id)	{
+ 171:sdk.c         **** 				if (verboseMode) {
+ 172:sdk.c         **** 					printf("RC_DATA -\n\r");
+ 173:sdk.c         **** 					printf("Pitch	(Channel 1) = %d\n\r",RO_RC_Data.channel[0]);
+ 174:sdk.c         **** 					printf("Roll	(Channel 2) = %d\n\r",RO_RC_Data.channel[1]);
+ 175:sdk.c         **** 					printf("Thrust	(Channel 3) = %d\n\r",RO_RC_Data.channel[2]);
+ 176:sdk.c         **** 					printf("Yaw	(Channel 4) = %d\n\r",RO_RC_Data.channel[3]);
+ 177:sdk.c         **** 					printf("Serial	(Channel 5) = %d\n\r",RO_RC_Data.channel[4]);
+ 178:sdk.c         **** 					printf("Auto	(Channel 6) = %d\n\r",RO_RC_Data.channel[5]);
+ 179:sdk.c         **** 				} else {
+ 180:sdk.c         **** 					char packet[sizeof(HEADER) + sizeof(RC_DATA) + sizeof(FOOTER)];
+ 181:sdk.c         **** 
+ 182:sdk.c         **** 					HEADER *header = (HEADER *)packet;
+ 183:sdk.c         **** 					RC_DATA *rc_data = (RC_DATA *)&packet[sizeof(HEADER)];
+ 184:sdk.c         **** 					FOOTER *footer = (FOOTER *)&packet[sizeof(HEADER) + sizeof(RC_DATA)];
+ 185:sdk.c         **** 
+ 186:sdk.c         **** //					printf("On  send packets,\n\r");
+ 187:sdk.c         **** 					rc_data->pitch_ch = RO_RC_Data.channel[0];
+ 188:sdk.c         **** //					printf("Pitch ch \n\r");
+ 189:sdk.c         **** 					rc_data->roll_ch	= RO_RC_Data.channel[1];
+ 190:sdk.c         **** //					printf("Roll ch \n\r");
+ 191:sdk.c         **** 					rc_data->thrust_ch	= RO_RC_Data.channel[2];
+ 192:sdk.c         **** 					rc_data->yaw_ch		= RO_RC_Data.channel[3];
+ 193:sdk.c         **** 					rc_data->ser_ch		= RO_RC_Data.channel[4];
+ 194:sdk.c         **** 					rc_data->auto_ch	= RO_RC_Data.channel[5];
+ 195:sdk.c         **** //					printf("auto ch \n\r");
+ 196:sdk.c         **** 
+ 197:sdk.c         **** //					printf("Header packets, 0x%x\n\r", control, controlState);
+ 198:sdk.c         **** 					//strcpy(header.start,"$>");//header->start	= "$>";
+ 199:sdk.c         **** 					header->start[0] = '$';
+ 200:sdk.c         **** 					header->start[1] = '>';
+ 201:sdk.c         **** 					header->length	= (short)sizeof(RC_DATA);
+ 202:sdk.c         **** 					header->id		= RC_DATA_id;
+ 203:sdk.c         **** 
+ 204:sdk.c         **** //					printf("footer packets, 0x%x\n\r", control, controlState);
+ 205:sdk.c         **** 					footer->checksum	= HLC_Checksum((char *)&rc_data, sizeof(RC_DATA));
+ 206:sdk.c         **** 					footer->stop[0] = '<';
+ 207:sdk.c         **** 					footer->stop[1] = '@';
+ 208:sdk.c         **** 					//strcpy(header.start,"<@");////footer->stop		= "<@";
+ 209:sdk.c         **** 
+ 210:sdk.c         **** 					UART_SendPacket_raw(packet, sizeof(packet));
+ 211:sdk.c         **** 
+ 212:sdk.c         **** 					/*
+ 213:sdk.c         **** //					printf("Assembling packets, 0x%x\n\r", control, controlState);
+ 214:sdk.c         **** 					int index = 0;
+ 215:sdk.c         **** 					for (int i = 0; i < sizeof(HEADER); i++)
+ 216:sdk.c         **** 						packet[index + i] = *((char *)&header + i);
+ 217:sdk.c         **** 					index += sizeof(HEADER);
+ 218:sdk.c         **** 
+ 219:sdk.c         **** 					for (int i = 0; i < sizeof(RC_DATA); i++)
+ 220:sdk.c         **** 						packet[index + i] = *((char *)&rc_data + i);
+ 221:sdk.c         **** 					index += sizeof(RC_DATA);
+ 222:sdk.c         **** 
+ 223:sdk.c         **** 					for (int i = 0; i < sizeof(FOOTER); i++)
+ 224:sdk.c         **** 						packet[index + i] = *((char *)&footer + i);
+ 225:sdk.c         **** 					index += sizeof(FOOTER);
+ 226:sdk.c         **** 
+ 227:sdk.c         **** //					printf("before send packets, 0x%x\n\r", control, controlState);
+ 228:sdk.c         **** 					UART_SendPacket_raw(packet, index);
+ 229:sdk.c         **** //					printf("after send packets, 0x%x\n\r", control, controlState);
+ 230:sdk.c         **** */
+ 231:sdk.c         **** 				}
+ 232:sdk.c         **** 				verboseMode = 0;
+ 233:sdk.c         **** 				controlState = HLC_START_SEQ;
+ 234:sdk.c         **** 			}
+ 235:sdk.c         **** 			else if (control == STATE_id) {
+ 236:sdk.c         **** 				if (verboseMode) {
+ 237:sdk.c         **** 					/*printf("STATE -\n\r");
+ 238:sdk.c         **** 					printf("Pitch		(deg)	= %f\n\r",LL_1khz_attitude_data.angle_pitch * 0.01);
+ 239:sdk.c         **** 					printf("Roll		(deg)	= %f\n\r",LL_1khz_attitude_data.angle_roll * 0.01);
+ 240:sdk.c         **** 					printf("Yaw		(deg)	= %f\n\r",LL_1khz_attitude_data.angle_yaw * 0.01);
+ 241:sdk.c         **** 					printf("Pitch Vel	(deg/s) = %f\n\r",LL_1khz_attitude_data.angvel_pitch * 0.015);
+ 242:sdk.c         **** 					printf("Roll Vel	(deg/s) = %f\n\r",LL_1khz_attitude_data.angvel_roll * 0.015);
+ 243:sdk.c         **** 					printf("Yaw Vel		(deg/s) = %f\n\r",LL_1khz_attitude_data.angvel_yaw * 0.015);
+ 244:sdk.c         **** 					printf("Latitude		= %d\n\r",LL_1khz_attitude_data.latitude_best_estimate);
+ 245:sdk.c         **** 					printf("Longitude		= %d\n\r",LL_1khz_attitude_data.longitude_best_estimate);
+ 246:sdk.c         **** 					printf("Height		(m)	= %f\n\r",LL_1khz_attitude_data.height * 0.001);
+ 247:sdk.c         **** 					printf("X Vel			= %d\n\r",LL_1khz_attitude_data.speed_x_best_estimate);
+ 248:sdk.c         **** 					printf("Y Vel			= %d\n\r",LL_1khz_attitude_data.speed_y_best_estimate);
+ 249:sdk.c         **** 					printf("Z Vel		(m/s)	= %f\n\r",LL_1khz_attitude_data.dheight * 0.001);
+ 250:sdk.c         **** 					printf("X Acc		(g)	= %f\n\r",LL_1khz_attitude_data.acc_x * 0.001);
+ 251:sdk.c         **** 					printf("Y Acc		(g)	= %f\n\r",LL_1khz_attitude_data.acc_y * 0.001);
+ 252:sdk.c         **** 					printf("Z Acc		(g)	= %f\n\r",LL_1khz_attitude_data.acc_z * 0.001);
+ 253:sdk.c         **** 					printf("Flight mode		= %d\n\r",LL_1khz_attitude_data.flightMode);
+ 254:sdk.c         **** 					*/
+ 255:sdk.c         **** 				} else {
+ 256:sdk.c         **** 					char packet[sizeof(HEADER) + sizeof(STATE) + sizeof(FOOTER)];
+ 257:sdk.c         **** 
+ 258:sdk.c         **** 					HEADER *header = (HEADER *)packet;
+ 259:sdk.c         **** 					STATE *state = (STATE *)&packet[sizeof(HEADER)];
+ 260:sdk.c         **** 					FOOTER *footer = (FOOTER *)&packet[sizeof(HEADER) + sizeof(STATE)];
+ 261:sdk.c         **** 
+ 262:sdk.c         **** 					state->pitch_ang	= LL_1khz_attitude_data.angle_pitch;
+ 263:sdk.c         **** 					state->roll_ang		= LL_1khz_attitude_data.angle_roll;
+ 264:sdk.c         **** 					state->yaw_ang		= LL_1khz_attitude_data.angle_yaw;
+ 265:sdk.c         **** 					state->pitch_vel	= LL_1khz_attitude_data.angvel_pitch;
+ 266:sdk.c         **** 					state->roll_vel		= LL_1khz_attitude_data.angvel_roll;
+ 267:sdk.c         **** 					state->yaw_vel		= LL_1khz_attitude_data.angvel_yaw;
+ 268:sdk.c         **** 					state->latitude		= LL_1khz_attitude_data.latitude_best_estimate; //LL_1khz_control_input.latit
+ 269:sdk.c         **** 					state->longitude	=     LL_1khz_attitude_data.longitude_best_estimate; // LL_1khz_control_input
+ 270:sdk.c         **** 					state->height		= LL_1khz_attitude_data.height;  // LL_1khz_control_input.height;
+ 271:sdk.c         **** 					state->x_vel		= (short)(x_vel / peripheralClockFrequency()); // LL_1khz_attitude_data.speed_x_
+ 272:sdk.c         **** 					state->y_vel		= (short)(y_vel / peripheralClockFrequency()); // LL_1khz_attitude_data.speed_y_
+ 273:sdk.c         **** 					state->z_vel		= LL_1khz_attitude_data.dheight;
+ 274:sdk.c         **** 					state->x_acc		= LL_1khz_attitude_data.acc_x;
+ 275:sdk.c         **** 					state->y_acc		= LL_1khz_attitude_data.acc_y;
+ 276:sdk.c         **** 					state->z_acc		= LL_1khz_attitude_data.acc_z;
+ 277:sdk.c         **** 					state->flight_mode	= LL_1khz_attitude_data.flightMode;
+ 278:sdk.c         **** 
+ 279:sdk.c         **** 					header->start[0] = '$';
+ 280:sdk.c         **** 					header->start[1] = '>';
+ 281:sdk.c         **** 					//strcpy(header.start,"$>");//header.start	= "$>";
+ 282:sdk.c         **** 					header->length	= (short)sizeof(STATE);
+ 283:sdk.c         **** 					header->id		= STATE_id;
+ 284:sdk.c         **** 
+ 285:sdk.c         **** 					footer->checksum	= HLC_Checksum((char *)&state, sizeof(STATE));
+ 286:sdk.c         **** 					footer->stop[0] = '<';
+ 287:sdk.c         **** 					footer->stop[1] = '@';
+ 288:sdk.c         **** 					//strcpy(footer.stop,"<@");//footer.stop		= "<@";
+ 289:sdk.c         **** 
+ 290:sdk.c         **** 					UART_SendPacket_raw(packet, sizeof(packet));
+ 291:sdk.c         **** 
+ 292:sdk.c         **** /*					int index = 0;
+ 293:sdk.c         **** 					for (int i = 0; i < sizeof(HEADER); i++)
+ 294:sdk.c         **** 						packet[index + i] = *((char *)&header + i);
+ 295:sdk.c         **** 					index += sizeof(HEADER);
+ 296:sdk.c         **** 
+ 297:sdk.c         **** 					for (int i = 0; i < sizeof(STATE); i++)
+ 298:sdk.c         **** 						packet[index + i] = *((char *)&state + i);
+ 299:sdk.c         **** 					index += sizeof(STATE);
+ 300:sdk.c         **** 
+ 301:sdk.c         **** 					for (int i = 0; i < sizeof(FOOTER); i++)
+ 302:sdk.c         **** 						packet[index + i] = *((char *)&footer + i);
+ 303:sdk.c         **** 					index += sizeof(FOOTER);
+ 304:sdk.c         **** 
+ 305:sdk.c         **** 					UART_SendPacket_raw(packet, index);
+ 306:sdk.c         **** */
+ 307:sdk.c         **** 
+ 308:sdk.c         **** 				}
+ 309:sdk.c         **** 				verboseMode = 0;
+ 310:sdk.c         **** 				controlState = HLC_START_SEQ;
+ 311:sdk.c         **** 			}
+ 312:sdk.c         **** 			else if (control == SENSOR_id) {
+ 313:sdk.c         **** 				if (verboseMode) {
+ 314:sdk.c         **** 					/*printf("SENSOR -\n\r");
+ 315:sdk.c         **** 					printf("Mag X Reading	= %d\n\r",LL_1khz_attitude_data.mag_x);
+ 316:sdk.c         **** 					printf("Mag Y Reading	= %d\n\r",LL_1khz_attitude_data.mag_y);
+ 317:sdk.c         **** 					printf("Mag Z Reading	= %d\n\r",LL_1khz_attitude_data.mag_z);
+ 318:sdk.c         **** 					printf("Camera Status	= %d\n\r",LL_1khz_attitude_data.cam_status);
+ 319:sdk.c         **** 					printf("Camera Pitch	= %d\n\r",LL_1khz_attitude_data.cam_status);
+ 320:sdk.c         **** 					printf("Camera Roll	= %d\n\r",LL_1khz_attitude_data.cam_angle_roll);
+ 321:sdk.c         **** 					printf("Battery (V)	= %f\n\r",LL_1khz_attitude_data.battery_voltage1 * 0.001);
+ 322:sdk.c         **** 					printf("Flight Time	= %d\n\r",LL_1khz_attitude_data.flight_time);
+ 323:sdk.c         **** 					printf("CPU Load	= %d\n\r",LL_1khz_attitude_data.cpu_load);
+ 324:sdk.c         **** 						*/
+ 325:sdk.c         **** 				} else {
+ 326:sdk.c         **** 					char packet[sizeof(HEADER) + sizeof(SENSOR) + sizeof(FOOTER)];
+ 327:sdk.c         **** 
+ 328:sdk.c         **** 					HEADER *header = (HEADER *)packet;
+ 329:sdk.c         **** 					SENSOR *sensor = (SENSOR *)&packet[sizeof(HEADER)];
+ 330:sdk.c         **** 					FOOTER *footer = (FOOTER *)&packet[sizeof(HEADER) + sizeof(SENSOR)];
+ 331:sdk.c         **** 
+ 332:sdk.c         **** 					sensor->mag_x		= LL_1khz_attitude_data.mag_x;
+ 333:sdk.c         **** 					sensor->mag_y		= LL_1khz_attitude_data.mag_y;
+ 334:sdk.c         **** 					sensor->mag_z		= LL_1khz_attitude_data.mag_z;
+ 335:sdk.c         **** 					sensor->cam_status	= LL_1khz_attitude_data.cam_status;
+ 336:sdk.c         **** 					sensor->cam_pitch	= LL_1khz_attitude_data.cam_angle_pitch;
+ 337:sdk.c         **** 					sensor->cam_roll	= LL_1khz_attitude_data.cam_angle_roll;
+ 338:sdk.c         **** 					sensor->battery		= LL_1khz_attitude_data.battery_voltage1;
+ 339:sdk.c         **** 					sensor->flight_time	= LL_1khz_attitude_data.flight_time;
+ 340:sdk.c         **** 					sensor->cpu_load	= LL_1khz_attitude_data.cpu_load;
+ 341:sdk.c         **** 
+ 342:sdk.c         **** 					//strcpy(header.start,"$>");//header.start	= "$>";
+ 343:sdk.c         **** 					header->start[0] = '$';
+ 344:sdk.c         **** 					header->start[1] = '>';
+ 345:sdk.c         **** 					header->length	= (short)sizeof(SENSOR);
+ 346:sdk.c         **** 					header->id		= SENSOR_id;
+ 347:sdk.c         **** 
+ 348:sdk.c         **** 					footer->checksum	= HLC_Checksum((char *)&sensor, sizeof(SENSOR));
+ 349:sdk.c         **** 					footer->stop[0] = '<';
+ 350:sdk.c         **** 					footer->stop[1] = '@';
+ 351:sdk.c         **** 					//strcpy(footer.stop,"<@");//footer.stop		= "<@";
+ 352:sdk.c         **** 
+ 353:sdk.c         **** 					UART_SendPacket_raw(packet, sizeof(packet));
+ 354:sdk.c         **** 
+ 355:sdk.c         **** 					/*
+ 356:sdk.c         **** 					int index = 0;
+ 357:sdk.c         **** 					for (int i = 0; i < sizeof(HEADER); i++)
+ 358:sdk.c         **** 						packet[index + i] = *((char *)&header + i);
+ 359:sdk.c         **** 					index += sizeof(HEADER);
+ 360:sdk.c         **** 
+ 361:sdk.c         **** 					for (int i = 0; i < sizeof(SENSOR); i++)
+ 362:sdk.c         **** 						packet[index + i] = *((char *)&sensor + i);
+ 363:sdk.c         **** 					index += sizeof(SENSOR);
+ 364:sdk.c         **** 
+ 365:sdk.c         **** 					for (int i = 0; i < sizeof(FOOTER); i++)
+ 366:sdk.c         **** 						packet[index + i] = *((char *)&footer + i);
+ 367:sdk.c         **** 					index += sizeof(FOOTER);
+ 368:sdk.c         **** 
+ 369:sdk.c         **** //
+ 370:sdk.c         **** 					UART_SendPacket_raw(packet, index);
+ 371:sdk.c         **** */
+ 372:sdk.c         **** 				}
+ 373:sdk.c         **** 				verboseMode = 0;
+ 374:sdk.c         **** 				controlState = HLC_START_SEQ;
+ 375:sdk.c         **** 			}
+ 376:sdk.c         **** 			else if (control == AUX_id) {
+ 377:sdk.c         **** 				if (verboseMode) {
+ 378:sdk.c         **** 				/*	printf("AUX -\n\r");
+ 379:sdk.c         **** 					printf("System Flags	= %d\n\r",LL_1khz_attitude_data.system_flags);
+ 380:sdk.c         **** 					printf("RC Data		= %d\n\r",LL_1khz_attitude_data.RC_data[0]);
+ 381:sdk.c         **** 					printf("Dummy 333Hz	= %d\n\r",LL_1khz_attitude_data.dummy_333Hz_1);
+ 382:sdk.c         **** 					printf("Motor Data	= %d\n\r",LL_1khz_attitude_data.motor_data[0]);
+ 383:sdk.c         **** 					printf("Battery2 (V)	= %f\n\r",LL_1khz_attitude_data.battery_voltage2 * 0.001);
+ 384:sdk.c         **** 					printf("Status		= %d\n\r",LL_1khz_attitude_data.status);
+ 385:sdk.c         **** 					printf("Status2		= %d\n\r",LL_1khz_attitude_data.status2);
+ 386:sdk.c         **** 						*/
+ 387:sdk.c         **** 				} else {
+ 388:sdk.c         **** 					char packet[sizeof(HEADER) + sizeof(AUX) + sizeof(FOOTER)];
+ 389:sdk.c         **** 
+ 390:sdk.c         **** 					HEADER *header = (HEADER *)packet;
+ 391:sdk.c         **** 					AUX *aux = (AUX *)&packet[sizeof(HEADER)];
+ 392:sdk.c         **** 					FOOTER *footer = (FOOTER *)&packet[sizeof(HEADER) + sizeof(AUX)];
+ 393:sdk.c         **** 
+ 394:sdk.c         **** 					aux->sys_flags		= LL_1khz_attitude_data.system_flags;
+ 395:sdk.c         **** 					for (int i = 0; i < sizeof(aux->RC_data); i++)
+ 396:sdk.c         **** 						aux->RC_data[i]	= LL_1khz_attitude_data.RC_data[i];
+ 397:sdk.c         **** 					aux->dummy_333Hz	= LL_1khz_attitude_data.dummy_333Hz_1;
+ 398:sdk.c         **** 					for (int i = 0; i < sizeof(aux->motor_data); i++)
+ 399:sdk.c         **** 						aux->motor_data[i] = LL_1khz_attitude_data.motor_data[i];
+ 400:sdk.c         **** 					aux->battery2		= LL_1khz_attitude_data.battery_voltage2;
+ 401:sdk.c         **** 					aux->status			= LL_1khz_attitude_data.status;
+ 402:sdk.c         **** 					aux->status2		= LL_1khz_attitude_data.status2;
+ 403:sdk.c         **** 
+ 404:sdk.c         **** 
+ 405:sdk.c         **** 
+ 406:sdk.c         **** 					//strcpy(header.start,"$>");
+ 407:sdk.c         **** 					header->start[0] = '$';
+ 408:sdk.c         **** 					header->start[1] = '>';
+ 409:sdk.c         **** 					//header.start	= "$>";
+ 410:sdk.c         **** 					header->length	= (short)sizeof(AUX);
+ 411:sdk.c         **** 					header->id		= AUX_id;
+ 412:sdk.c         **** 
+ 413:sdk.c         **** 					footer->checksum	= HLC_Checksum((char *)&aux, (int)sizeof(AUX));
+ 414:sdk.c         **** 					//footer.stop		= "<@";
+ 415:sdk.c         **** 					//strcpy(footer.stop,"<@");
+ 416:sdk.c         **** 					footer->stop[0] = '<';
+ 417:sdk.c         **** 					footer->stop[1] = '@';
+ 418:sdk.c         **** 
+ 419:sdk.c         **** 					UART_SendPacket_raw(packet, sizeof(packet));
+ 420:sdk.c         **** /*
+ 421:sdk.c         **** 					int index = 0;
+ 422:sdk.c         **** 					for (int i = 0; i < sizeof(HEADER); i++)
+ 423:sdk.c         **** 						packet[index + i] = *((char *)&header + i);
+ 424:sdk.c         **** 					index += sizeof(HEADER);
+ 425:sdk.c         **** 
+ 426:sdk.c         **** 					for (int i = 0; i < sizeof(AUX); i++)
+ 427:sdk.c         **** 						packet[index + i] = *((char *)&aux + i);
+ 428:sdk.c         **** 					index += sizeof(AUX);
+ 429:sdk.c         **** 
+ 430:sdk.c         **** 					for (int i = 0; i < sizeof(FOOTER); i++)
+ 431:sdk.c         **** 						packet[index + i] = *((char *)&footer + i);
+ 432:sdk.c         **** 					index += sizeof(FOOTER);
+ 433:sdk.c         **** 
+ 434:sdk.c         **** //
+ 435:sdk.c         **** 					UART_SendPacket_raw(packet, index);
+ 436:sdk.c         **** //*/
+ 437:sdk.c         **** 				}
+ 438:sdk.c         **** 				verboseMode = 0;
+ 439:sdk.c         **** 				controlState = HLC_START_SEQ;
+ 440:sdk.c         **** 			}
+ 441:sdk.c         **** 			else
+ 442:sdk.c         **** 				controlState = HLC_START_SEQ;
+ 443:sdk.c         **** 			break;
+ 444:sdk.c         **** 
+ 445:sdk.c         **** 		case HLC_CMD_SEQ1:
+ 446:sdk.c         **** 			//printf("%c cmd seq 1, 0x%x\n\r", control, controlState);
+ 447:sdk.c         **** 
+ 448:sdk.c         **** 			if (control == '>')	controlState = HLC_CMD_SEQ2;
+ 449:sdk.c         **** 			else				controlState = HLC_START_SEQ;
+ 450:sdk.c         **** 			break;
+ 451:sdk.c         **** 
+ 452:sdk.c         **** 		case HLC_CMD_SEQ2:
+ 453:sdk.c         **** 			//printf("%c cmd seq 2, 0x%x\n\r", control, controlState);
+ 454:sdk.c         **** 
+ 455:sdk.c         **** 			if (control == 'D') {
+ 456:sdk.c         **** 				WO_SDK.ctrl_enabled = 0x00;
+ 457:sdk.c         **** 				controlState = HLC_START_SEQ;
+ 458:sdk.c         **** 			}
+ 459:sdk.c         **** 			else if (control == 'N') {
+ 460:sdk.c         **** 			//	printf("Pch: 0x%x\n\r", WO_CTRL_Input.pitch);
+ 461:sdk.c         **** 			//	printf("Rol: 0x%x\n\r", WO_CTRL_Input.roll);
+ 462:sdk.c         **** 			//	printf("Yaw: 0x%x\n\r", WO_CTRL_Input.yaw);
+ 463:sdk.c         **** 			//	printf("Thr: 0x%x\n\r", WO_CTRL_Input.thrust);
+ 464:sdk.c         **** 
+ 465:sdk.c         **** 				controlState = HLC_CMD_NAUT;
+ 466:sdk.c         **** 			}
+ 467:sdk.c         **** 			else
+ 468:sdk.c         **** 				controlState = HLC_START_SEQ;
+ 469:sdk.c         **** 
+ 470:sdk.c         **** 			byteIndex = 0;
+ 471:sdk.c         **** 			break;
+ 472:sdk.c         **** 
+ 473:sdk.c         **** 		case HLC_CMD_NAUT:
+ 474:sdk.c         **** 			//printf("%c cmd nat, 0x%x\n\r", control, controlState);
+ 475:sdk.c         **** 
+ 476:sdk.c         **** 			packetSize = 9;
+ 477:sdk.c         **** 
+ 478:sdk.c         **** 			ctrlEnabled	= 0x01;
+ 479:sdk.c         **** 			ctrlMode	= 0x00;
+ 480:sdk.c         **** 
+ 481:sdk.c         **** 
+ 482:sdk.c         **** 			WO_CTRL_Input.ctrl	= byteIndex == 0 ? (unsigned char)control : WO_CTRL_Input.ctrl;
+ 483:sdk.c         **** 
+ 484:sdk.c         **** 			*((char *)&WO_CTRL_Input.pitch + 0)	= byteIndex == 1 ? (unsigned char)control : *((char *)&WO_CT
+ 485:sdk.c         **** 			*((char *)&WO_CTRL_Input.pitch + 1)	= byteIndex == 2 ? (unsigned char)control : *((char *)&WO_CT
+ 486:sdk.c         **** 
+ 487:sdk.c         **** 			*((char *)&WO_CTRL_Input.roll + 0)	= byteIndex == 3 ? (unsigned char)control : *((char *)&WO_CTR
+ 488:sdk.c         **** 			*((char *)&WO_CTRL_Input.roll + 1)	= byteIndex == 4 ? (unsigned char)control : *((char *)&WO_CTR
+ 489:sdk.c         **** 
+ 490:sdk.c         **** 			*((char *)&WO_CTRL_Input.yaw + 0)	= byteIndex == 5 ? (unsigned char)control : *((char *)&WO_CTRL
+ 491:sdk.c         **** 			*((char *)&WO_CTRL_Input.yaw + 1)	= byteIndex == 6 ? (unsigned char)control : *((char *)&WO_CTRL
+ 492:sdk.c         **** 
+ 493:sdk.c         **** 			*((char *)&WO_CTRL_Input.thrust + 0)= byteIndex == 7 ? (unsigned char)control : *((char *)&WO_CT
+ 494:sdk.c         **** 			*((char *)&WO_CTRL_Input.thrust + 1)= byteIndex == 8 ? (unsigned char)control : *((char *)&WO_CT
+ 495:sdk.c         **** 
+ 496:sdk.c         **** 			controlState = byteIndex == packetSize ? HLC_START_SEQ : HLC_CMD_NAUT;
+ 497:sdk.c         **** 
+ 498:sdk.c         **** 			if( WO_CTRL_Input.pitch> 2000)
+ 499:sdk.c         **** 			{
+ 500:sdk.c         **** 				WO_CTRL_Input.pitch= 2000;
+ 501:sdk.c         **** 			}
+ 502:sdk.c         **** 			if( WO_CTRL_Input.pitch< -2000)
+ 503:sdk.c         **** 			{
+ 504:sdk.c         **** 				WO_CTRL_Input.pitch= -2000;
+ 505:sdk.c         **** 			}
+ 506:sdk.c         **** 
+ 507:sdk.c         **** 			if( WO_CTRL_Input.roll> 2000)
+ 508:sdk.c         **** 			{
+ 509:sdk.c         **** 					WO_CTRL_Input.roll= 2000;
+ 510:sdk.c         **** 			}
+ 511:sdk.c         **** 			if( WO_CTRL_Input.roll< -2000)
+ 512:sdk.c         **** 			{
+ 513:sdk.c         **** 				WO_CTRL_Input.roll= -2000;
+ 514:sdk.c         **** 			}
+ 515:sdk.c         **** 
+ 516:sdk.c         **** 			if( WO_CTRL_Input.yaw> 1500)
+ 517:sdk.c         **** 			{
+ 518:sdk.c         **** 					WO_CTRL_Input.yaw= 1500;
+ 519:sdk.c         **** 			}
+ 520:sdk.c         **** 			if( WO_CTRL_Input.yaw< -1500)
+ 521:sdk.c         **** 			{
+ 522:sdk.c         **** 				WO_CTRL_Input.yaw= -1500;
+ 523:sdk.c         **** 			}
+ 524:sdk.c         **** 
+ 525:sdk.c         **** 			if( WO_CTRL_Input.thrust> 3200)
+ 526:sdk.c         **** 			{
+ 527:sdk.c         **** 				WO_CTRL_Input.thrust= 3200;
+ 528:sdk.c         **** 			}
+ 529:sdk.c         **** 			if( WO_CTRL_Input.thrust<0)
+ 530:sdk.c         **** 			{
+ 531:sdk.c         **** 				WO_CTRL_Input.thrust= 0;
+ 532:sdk.c         **** 			}
+ 533:sdk.c         **** 
+ 534:sdk.c         **** 			//WO_CTRL_Input.roll=ntohs(WO_CTRL_Input.roll);
+ 535:sdk.c         **** 		//	WO_CTRL_Input.yaw=ntohs(WO_CTRL_Input.yaw);
+ 536:sdk.c         **** 		//	WO_CTRL_Input.thrust=ntohs(WO_CTRL_Input.thrust);
+ 537:sdk.c         **** 
+ 538:sdk.c         **** 			byteIndex++;
+ 539:sdk.c         **** 			break;
+ 540:sdk.c         **** 		}
+ 541:sdk.c         **** 
+ 542:sdk.c         **** //	}
+ 543:sdk.c         **** }
+ 544:sdk.c         **** 
+ 545:sdk.c         **** short HLC_Checksum(void *data, int size) {
+  16              	@ Function supports interworking.
+  17              		@ args = 0, pretend = 0, frame = 0
+  18              		@ frame_needed = 0, uses_anonymous_args = 0
+  19              		@ link register save eliminated.
+  20              	.LVL0:
+  21              	.LBB2:
+  22              		.loc 1 547 0
+ 546:sdk.c         **** 	int chk = 0;
+ 547:sdk.c         **** 	for (int i = 0; i < size; i++)
+  23              	, #0
+  24 0000 000051E3 	.LBE2:
+  25              		.loc 1 545 0
+  26              		@ lr needed for prologue
+  27              	.LBB3:
+  28              		.loc 1 547 0
+  29              		movle	r0, #0
+  30 0004 0000A0D3 	.LVL1:
+  31              		ble	.L4
+  32 0008 080000DA 		mov	ip, #0
+  33 000c 00C0A0E3 	.LVL2:
+  34              		mov	r2, ip
+  35 0010 0C20A0E1 	.LVL3:
+  36              	.L5:
+  37              	.LVL4:
+  38              		.loc 1 549 0
+ 548:sdk.c         **** 	{
+ 549:sdk.c         **** 		chk += *((char *)data + i);
+  39              	0]	@ zero_extendqisi2
+  40 0014 0030D2E7 		.loc 1 547 0
+  41              		add	r2, r2, #1
+  42 0018 012082E2 		cmp	r1, r2
+  43 001c 020051E1 		.loc 1 549 0
+  44              		add	ip, ip, r3
+  45 0020 03C08CE0 		.loc 1 547 0
+  46              		bne	.L5
+  47 0024 FAFFFF1A 		mov	r3, ip, asl #16
+  48 0028 0C38A0E1 		mov	r0, r3, lsr #16
+  49 002c 2308A0E1 	.LVL5:
+  50              	.L4:
+  51              		mov	r0, r0, asl #16
+  52 0030 0008A0E1 	.LBE3:
+  53              		.loc 1 553 0
+ 550:sdk.c         **** 	}
+ 551:sdk.c         **** 
+ 552:sdk.c         **** 	return (short)(chk & 0xFFFF);
+ 553:sdk.c         **** }
+  54              	r #16
+  55 0034 4008A0E1 		bx	lr
+  56 0038 1EFF2FE1 	.LFE4:
+  58              		.section	.rodata.str1.4,"aMS",%progbits,1
+  59              		.align	2
+  60              	.LC0:
+  61              		.ascii	"RC_DATA -\012\015\000"
+  62 0000 52435F44 		.align	2
+  62      41544120 
+  62      2D0A0D00 
+  63              	.LC1:
+  64              		.ascii	"Pitch\011(Channel 1) = %d\012\015\000"
+  65 000c 50697463 		.align	2
+  65      68092843 
+  65      68616E6E 
+  65      656C2031 
+  65      29203D20 
+  66 0025 000000   	.LC2:
+  67              		.ascii	"Roll\011(Channel 2) = %d\012\015\000"
+  68 0028 526F6C6C 		.align	2
+  68      09284368 
+  68      616E6E65 
+  68      6C203229 
+  68      203D2025 
+  69              	.LC3:
+  70              		.ascii	"Thrust\011(Channel 3) = %d\012\015\000"
+  71 0040 54687275 		.align	2
+  71      73740928 
+  71      4368616E 
+  71      6E656C20 
+  71      3329203D 
+  72 005a 0000     	.LC4:
+  73              		.ascii	"Yaw\011(Channel 4) = %d\012\015\000"
+  74 005c 59617709 		.align	2
+  74      28436861 
+  74      6E6E656C 
+  74      20342920 
+  74      3D202564 
+  75 0073 00       	.LC5:
+  76              		.ascii	"Serial\011(Channel 5) = %d\012\015\000"
+  77 0074 53657269 		.align	2
+  77      616C0928 
+  77      4368616E 
+  77      6E656C20 
+  77      3529203D 
+  78 008e 0000     	.LC6:
+  79              		.ascii	"Auto\011(Channel 6) = %d\012\015\000"
+  80 0090 4175746F 		.global	__divdi3
+  80      09284368 
+  80      616E6E65 
+  80      6C203629 
+  80      203D2025 
+  81              		.text
+  82              		.align	2
+  83              		.global	HLC_Protocol
+  85              	HLC_Protocol:
+  86              	.LFB3:
+  87              		.loc 1 133 0
+  88              		@ Function supports interworking.
+  89              		@ args = 0, pretend = 0, frame = 288
+  90              		@ frame_needed = 0, uses_anonymous_args = 0
+  91              	.LVL6:
+  92              		stmfd	sp!, {r4, r5, r6, r7, r8, r9, sl, fp, lr}
+  93 003c F04F2DE9 	.LCFI0:
+  94              		.loc 1 150 0
+  95              		ldr	r9, .L114
+  96 0040 B0999FE5 		ldrsh	r3, [r9, #0]
+  97 0044 F030D9E1 		.loc 1 133 0
+  98              		sub	sp, sp, #288
+  99 0048 12DE4DE2 	.LCFI1:
+ 100              		.loc 1 133 0
+ 101              		and	fp, r0, #255
+ 102 004c FFB000E2 		.loc 1 150 0
+ 103              		cmp	r3, #23
+ 104 0050 170053E3 		ldrls	pc, [pc, r3, asl #2]
+ 105 0054 03F19F97 		b	.L102
+ 106 0058 870000EA 		.p2align 2
+ 107              	.L19:
+ 108              		.word	.L13
+ 109 005c 88020000 		.word	.L14
+ 110 0060 6C040000 		.word	.L15
+ 111 0064 FC020000 		.word	.L102
+ 112 0068 7C020000 		.word	.L102
+ 113 006c 7C020000 		.word	.L102
+ 114 0070 7C020000 		.word	.L102
+ 115 0074 7C020000 		.word	.L102
+ 116 0078 7C020000 		.word	.L102
+ 117 007c 7C020000 		.word	.L102
+ 118 0080 7C020000 		.word	.L102
+ 119 0084 7C020000 		.word	.L102
+ 120 0088 7C020000 		.word	.L102
+ 121 008c 7C020000 		.word	.L102
+ 122 0090 7C020000 		.word	.L102
+ 123 0094 7C020000 		.word	.L102
+ 124 0098 7C020000 		.word	.L102
+ 125 009c 7C020000 		.word	.L16
+ 126 00a0 E0020000 		.word	.L17
+ 127 00a4 B4020000 		.word	.L102
+ 128 00a8 7C020000 		.word	.L102
+ 129 00ac 7C020000 		.word	.L102
+ 130 00b0 7C020000 		.word	.L102
+ 131 00b4 7C020000 		.word	.L18
+ 132 00b8 BC000000 	.LVL7:
+ 133              	.L18:
+ 134              		.loc 1 482 0
+ 135              		ldr	r0, .L114+4
+ 136 00bc 38099FE5 		ldrh	r3, [r0, #0]
+ 137 00c0 B030D0E1 		cmp	r3, #0
+ 138 00c4 000053E3 		.loc 1 478 0
+ 139              		ldr	r3, .L114+8
+ 140 00c8 30399FE5 		mov	r2, #1
+ 141 00cc 0120A0E3 		.loc 1 482 0
+ 142              		ldrne	ip, .L114+12
+ 143 00d0 2CC99F15 		.loc 1 478 0
+ 144              		strb	r2, [r3, #0]
+ 145 00d4 0020C3E5 		.loc 1 479 0
+ 146              		ldr	r3, .L114+16
+ 147 00d8 28399FE5 		.loc 1 482 0
+ 148              		ldrneh	r2, [ip, #8]
+ 149 00dc B820DC11 		ldreq	ip, .L114+12
+ 150 00e0 1CC99F05 		.loc 1 476 0
+ 151              		ldr	lr, .L114+20
+ 152 00e4 20E99FE5 		.loc 1 479 0
+ 153              		mov	r1, #0
+ 154 00e8 0010A0E3 		strb	r1, [r3, #0]
+ 155 00ec 0010C3E5 		.loc 1 482 0
+ 156              		moveq	r2, fp
+ 157 00f0 0B20A001 		.loc 1 484 0
+ 158              		ldrh	r3, [r0, #0]
+ 159 00f4 B030D0E1 		.loc 1 476 0
+ 160              		mov	r6, #9	@ movhi
+ 161 00f8 0960A0E3 		.loc 1 482 0
+ 162              		strh	r2, [ip, #8]	@ movhi
+ 163 00fc B820CCE1 		.loc 1 476 0
+ 164              		strh	r6, [lr, #0]	@ movhi
+ 165 0100 B060CEE1 		.loc 1 484 0
+ 166              		ldr	ip, .L114+12
+ 167 0104 F8C89FE5 		cmp	r3, #1
+ 168 0108 010053E3 		ldrneb	r2, [ip, #0]	@ zero_extendqisi2
+ 169 010c 0020DC15 	.LVL8:
+ 170              		.loc 1 485 0
+ 171              		ldrh	r3, [r0, #0]
+ 172 0110 B030D0E1 		.loc 1 484 0
+ 173              		moveq	r2, fp
+ 174 0114 0B20A001 		strb	r2, [ip, #0]
+ 175 0118 0020CCE5 		mov	r1, ip
+ 176 011c 0C10A0E1 		.loc 1 485 0
+ 177              		cmp	r3, #2
+ 178 0120 020053E3 		ldrneb	r1, [r1, #1]	@ zero_extendqisi2
+ 179 0124 0110D115 	.LVL9:
+ 180              		ldr	r2, .L114+24
+ 181 0128 E0289FE5 	.LVL10:
+ 182              		moveq	r1, fp
+ 183 012c 0B10A001 		.loc 1 487 0
+ 184              		ldrh	r3, [r0, #0]
+ 185 0130 B030D0E1 		.loc 1 485 0
+ 186              		strb	r1, [r2, #0]
+ 187 0134 0010C2E5 		.loc 1 487 0
+ 188              		ldr	r1, .L114+28
+ 189 0138 D4189FE5 	.LVL11:
+ 190              		cmp	r3, #3
+ 191 013c 030053E3 		.loc 1 488 0
+ 192              		ldrh	r3, [r0, #0]
+ 193 0140 B030D0E1 		.loc 1 487 0
+ 194              		ldrneb	r2, [r1, #0]	@ zero_extendqisi2
+ 195 0144 0020D115 	.LVL12:
+ 196              		moveq	r2, fp
+ 197 0148 0B20A001 		.loc 1 488 0
+ 198              		cmp	r3, #4
+ 199 014c 040053E3 		.loc 1 487 0
+ 200              		strb	r2, [r1, #0]
+ 201 0150 0020C1E5 		.loc 1 488 0
+ 202              		ldrneb	r1, [r1, #1]	@ zero_extendqisi2
+ 203 0154 0110D115 	.LVL13:
+ 204              		ldr	r2, .L114+32
+ 205 0158 B8289FE5 	.LVL14:
+ 206              		moveq	r1, fp
+ 207 015c 0B10A001 		.loc 1 490 0
+ 208              		ldrh	r3, [r0, #0]
+ 209 0160 B030D0E1 		.loc 1 488 0
+ 210              		strb	r1, [r2, #0]
+ 211 0164 0010C2E5 		.loc 1 490 0
+ 212              		ldr	r1, .L114+36
+ 213 0168 AC189FE5 	.LVL15:
+ 214              		cmp	r3, #5
+ 215 016c 050053E3 		.loc 1 491 0
+ 216              		ldrh	r3, [r0, #0]
+ 217 0170 B030D0E1 		.loc 1 490 0
+ 218              		ldrneb	r2, [r1, #0]	@ zero_extendqisi2
+ 219 0174 0020D115 	.LVL16:
+ 220              		moveq	r2, fp
+ 221 0178 0B20A001 		.loc 1 491 0
+ 222              		cmp	r3, #6
+ 223 017c 060053E3 		.loc 1 490 0
+ 224              		strb	r2, [r1, #0]
+ 225 0180 0020C1E5 		.loc 1 491 0
+ 226              		ldrneb	r1, [r1, #1]	@ zero_extendqisi2
+ 227 0184 0110D115 	.LVL17:
+ 228              		ldr	r2, .L114+40
+ 229 0188 90289FE5 	.LVL18:
+ 230              		moveq	r1, fp
+ 231 018c 0B10A001 		.loc 1 493 0
+ 232              		ldrh	r3, [r0, #0]
+ 233 0190 B030D0E1 		.loc 1 491 0
+ 234              		strb	r1, [r2, #0]
+ 235 0194 0010C2E5 		.loc 1 493 0
+ 236              		cmp	r3, #7
+ 237 0198 070053E3 		.loc 1 494 0
+ 238              		ldrh	r1, [r0, #0]
+ 239 019c B010D0E1 	.LVL19:
+ 240              		.loc 1 493 0
+ 241              		ldr	r3, .L114+44
+ 242 01a0 7C389FE5 		moveq	r2, fp
+ 243 01a4 0B20A001 	.LVL20:
+ 244              		ldrneb	r2, [r3, #0]	@ zero_extendqisi2
+ 245 01a8 0020D315 		.loc 1 494 0
+ 246              		cmp	r1, #8
+ 247 01ac 080051E3 		ldrneb	fp, [r3, #1]	@ zero_extendqisi2
+ 248 01b0 01B0D315 		.loc 1 493 0
+ 249              		strb	r2, [r3, #0]
+ 250 01b4 0020C3E5 		.loc 1 494 0
+ 251              		strb	fp, [r3, #1]
+ 252 01b8 01B0C3E5 		.loc 1 496 0
+ 253              		ldrh	r3, [lr, #0]
+ 254 01bc B030DEE1 		.loc 1 498 0
+ 255              		ldrsh	r2, [ip, #0]
+ 256 01c0 F020DCE1 	.LVL21:
+ 257              		.loc 1 496 0
+ 258              		cmp	r1, r3
+ 259 01c4 030051E1 		movne	r3, #23
+ 260 01c8 1730A013 		moveq	r3, #0
+ 261 01cc 0030A003 		.loc 1 498 0
+ 262              		ldr	r1, .L114+12
+ 263 01d0 2C189FE5 		cmp	r2, #2000
+ 264 01d4 7D0E52E3 		.loc 1 500 0
+ 265              		movgt	r2, #2000	@ movhi
+ 266 01d8 7D2EA0C3 		.loc 1 496 0
+ 267              		strh	r3, [r9, #0]	@ movhi
+ 268 01dc B030C9E1 		.loc 1 500 0
+ 269              		strgth	r2, [r1, #0]	@ movhi
+ 270 01e0 B020C1C1 		.loc 1 498 0
+ 271              		bgt	.L88
+ 272 01e4 030000CA 		.loc 1 502 0
+ 273              		cmn	r2, #2000
+ 274 01e8 7D0E72E3 		.loc 1 504 0
+ 275              		movlt	r3, #-2097152000
+ 276 01ec 8334A0B3 		movlt	r3, r3, asr #20
+ 277 01f0 433AA0B1 		strlth	r3, [r1, #0]	@ movhi
+ 278 01f4 B030C1B1 	.L88:
+ 279              		.loc 1 507 0
+ 280              		ldrsh	r3, [ip, #2]
+ 281 01f8 F230DCE1 		ldr	r2, .L114+12
+ 282 01fc 00289FE5 		cmp	r3, #2000
+ 283 0200 7D0E53E3 		.loc 1 509 0
+ 284              		movgt	r3, #2000	@ movhi
+ 285 0204 7D3EA0C3 		strgth	r3, [r2, #2]	@ movhi
+ 286 0208 B230C2C1 		.loc 1 507 0
+ 287              		bgt	.L92
+ 288 020c 030000CA 		.loc 1 511 0
+ 289              		cmn	r3, #2000
+ 290 0210 7D0E73E3 		.loc 1 513 0
+ 291              		movlt	r3, #-2097152000
+ 292 0214 8334A0B3 		movlt	r3, r3, asr #20
+ 293 0218 433AA0B1 		strlth	r3, [r2, #2]	@ movhi
+ 294 021c B230C2B1 	.L92:
+ 295              		.loc 1 516 0
+ 296              		mov	r3, #1488
+ 297 0220 5D3EA0E3 		ldrsh	r2, [ip, #4]
+ 298 0224 F420DCE1 		add	r3, r3, #12
+ 299 0228 0C3083E2 		cmp	r2, r3
+ 300 022c 030052E1 		ldr	r1, .L114+12
+ 301 0230 CC179FE5 		bgt	.L107
+ 302 0234 030000CA 		.loc 1 520 0
+ 303              		mvn	r3, #1488
+ 304 0238 5D3EE0E3 		sub	r3, r3, #11
+ 305 023c 0B3043E2 		cmp	r2, r3
+ 306 0240 030052E1 		bge	.L96
+ 307 0244 000000AA 	.L107:
+ 308              		.loc 1 522 0
+ 309              		strh	r3, [r1, #4]	@ movhi
+ 310 0248 B430C1E1 	.L96:
+ 311              		.loc 1 525 0
+ 312              		ldrsh	r3, [ip, #6]
+ 313 024c F630DCE1 		ldr	r2, .L114+12
+ 314 0250 AC279FE5 		cmp	r3, #3200
+ 315 0254 320D53E3 		.loc 1 527 0
+ 316              		movgt	r5, #3200	@ movhi
+ 317 0258 325DA0C3 		strgth	r5, [r2, #6]	@ movhi
+ 318 025c B650C2C1 		.loc 1 525 0
+ 319              		bgt	.L100
+ 320 0260 020000CA 		.loc 1 529 0
+ 321              		cmp	r3, #0
+ 322 0264 000053E3 		.loc 1 531 0
+ 323              		movlt	r6, #0	@ movhi
+ 324 0268 0060A0B3 		strlth	r6, [r2, #6]	@ movhi
+ 325 026c B660C2B1 	.L100:
+ 326              		.loc 1 538 0
+ 327              		ldrh	r3, [r0, #0]
+ 328 0270 B030D0E1 		add	r3, r3, #1
+ 329 0274 013083E2 		strh	r3, [r0, #0]	@ movhi
+ 330 0278 B030C0E1 	.LVL22:
+ 331              	.L102:
+ 332              		.loc 1 543 0
+ 333              		add	sp, sp, #288
+ 334 027c 12DE8DE2 		ldmfd	sp!, {r4, r5, r6, r7, r8, r9, sl, fp, lr}
+ 335 0280 F04FBDE8 		bx	lr
+ 336 0284 1EFF2FE1 	.LVL23:
+ 337              	.L13:
+ 338              		.loc 1 153 0
+ 339              		cmp	fp, #36
+ 340 0288 24005BE3 		moveq	r1, #1	@ movhi
+ 341 028c 0110A003 		streqh	r1, [r9, #0]	@ movhi
+ 342 0290 B010C901 		beq	.L102
+ 343 0294 F8FFFF0A 		.loc 1 154 0
+ 344              		cmp	fp, #35
+ 345 0298 23005BE3 		moveq	r2, #17	@ movhi
+ 346 029c 1120A003 		streqh	r2, [r9, #0]	@ movhi
+ 347 02a0 B020C901 		beq	.L102
+ 348 02a4 F4FFFF0A 	.L28:
+ 349              		.loc 1 442 0
+ 350              		mov	r3, #0	@ movhi
+ 351 02a8 0030A0E3 		strh	r3, [r9, #0]	@ movhi
+ 352 02ac B030C9E1 		b	.L102
+ 353 02b0 F1FFFFEA 	.L17:
+ 354              		.loc 1 455 0
+ 355              		cmp	fp, #68
+ 356 02b4 44005BE3 		beq	.L108
+ 357 02b8 8300000A 		.loc 1 459 0
+ 358              		cmp	fp, #78
+ 359 02bc 4E005BE3 		.loc 1 465 0
+ 360              		moveq	r1, #23	@ movhi
+ 361 02c0 1710A003 		.loc 1 468 0
+ 362              		movne	r2, #0	@ movhi
+ 363 02c4 0020A013 		.loc 1 465 0
+ 364              		streqh	r1, [r9, #0]	@ movhi
+ 365 02c8 B010C901 		.loc 1 468 0
+ 366              		strneh	r2, [r9, #0]	@ movhi
+ 367 02cc B020C911 	.L54:
+ 368              		.loc 1 470 0
+ 369              		ldr	r3, .L114+4
+ 370 02d0 24379FE5 		mov	r5, #0	@ movhi
+ 371 02d4 0050A0E3 		strh	r5, [r3, #0]	@ movhi
+ 372 02d8 B050C3E1 		b	.L102
+ 373 02dc E6FFFFEA 	.L16:
+ 374              		.loc 1 448 0
+ 375              		cmp	fp, #62
+ 376 02e0 3E005BE3 		moveq	r5, #18	@ movhi
+ 377 02e4 1250A003 		streqh	r5, [r9, #0]	@ movhi
+ 378 02e8 B050C901 		beq	.L102
+ 379 02ec E2FFFF0A 	.L50:
+ 380              		.loc 1 449 0
+ 381              		mov	r6, #0	@ movhi
+ 382 02f0 0060A0E3 		strh	r6, [r9, #0]	@ movhi
+ 383 02f4 B060C9E1 		b	.L102
+ 384 02f8 DFFFFFEA 	.L15:
+ 385              		.loc 1 166 0
+ 386              		cmp	fp, #118
+ 387 02fc 76005BE3 		beq	.L109
+ 388 0300 6800000A 		.loc 1 170 0
+ 389              		cmp	fp, #97
+ 390 0304 61005BE3 		beq	.L110
+ 391 0308 7400000A 		.loc 1 235 0
+ 392              		cmp	fp, #98
+ 393 030c 62005BE3 		beq	.L111
+ 394 0310 9000000A 		.loc 1 312 0
+ 395              		cmp	fp, #99
+ 396 0314 63005BE3 		beq	.L112
+ 397 0318 5800000A 		.loc 1 376 0
+ 398              		cmp	fp, #122
+ 399 031c 7A005BE3 		bne	.L28
+ 400 0320 E0FFFF1A 		.loc 1 377 0
+ 401              		ldr	r1, .L114+48
+ 402 0324 FC169FE5 		ldrb	ip, [r1, #0]	@ zero_extendqisi2
+ 403 0328 00C0D1E5 		cmp	ip, #0
+ 404 032c 00005CE3 		bne	.L44
+ 405 0330 4800001A 	.LBB4:
+ 406              		.loc 1 394 0
+ 407              		ldr	r2, .L114+52
+ 408 0334 F0269FE5 		.loc 1 391 0
+ 409              		add	r3, sp, #184
+ 410 0338 B8308DE2 		.loc 1 394 0
+ 411              		ldrb	r1, [r2, #0]	@ zero_extendqisi2
+ 412 033c 0010D2E5 		ldrb	r0, [r2, #1]	@ zero_extendqisi2
+ 413 0340 0100D2E5 		.loc 1 391 0
+ 414              		str	r3, [sp, #280]
+ 415 0344 18318DE5 	.LVL24:
+ 416              		.loc 1 394 0
+ 417              		strb	r1, [sp, #184]
+ 418 0348 B810CDE5 		strb	r0, [sp, #185]
+ 419 034c B900CDE5 		mov	lr, r2
+ 420 0350 02E0A0E1 		mov	r1, ip
+ 421 0354 0C10A0E1 	.LVL25:
+ 422              		.loc 1 390 0
+ 423              		add	r4, sp, #179
+ 424 0358 B3408DE2 		.loc 1 392 0
+ 425              		add	r5, sp, #220
+ 426 035c DC508DE2 	.LVL26:
+ 427              		.loc 1 394 0
+ 428              		mov	r0, r2
+ 429 0360 0200A0E1 	.L46:
+ 430              	.LBB5:
+ 431              		.loc 1 396 0
+ 432              		ldr	r3, [sp, #280]
+ 433 0364 18319DE5 		ldrb	r2, [r0, #14]	@ zero_extendqisi2
+ 434 0368 0E20D0E5 		add	r3, r3, r1
+ 435 036c 013083E0 		.loc 1 395 0
+ 436              		add	r1, r1, #1
+ 437 0370 011081E2 		cmp	r1, #10
+ 438 0374 0A0051E3 		.loc 1 396 0
+ 439              		strb	r2, [r3, #2]
+ 440 0378 0220C3E5 		.loc 1 395 0
+ 441              		add	r0, r0, #1
+ 442 037c 010080E2 		bne	.L46
+ 443 0380 F7FFFF1A 	.LBE5:
+ 444              		.loc 1 397 0
+ 445              		ldrb	r3, [lr, #38]	@ zero_extendqisi2
+ 446 0384 2630DEE5 		ldr	r1, [sp, #280]
+ 447 0388 18119DE5 	.LVL27:
+ 448              		strb	r3, [r1, #12]
+ 449 038c 0C30C1E5 		ldrb	r2, [lr, #39]	@ zero_extendqisi2
+ 450 0390 2720DEE5 		ldr	lr, .L114+52
+ 451 0394 90E69FE5 		strb	r2, [r1, #13]
+ 452 0398 0D20C1E5 		mov	r0, lr
+ 453 039c 0E00A0E1 		mov	r1, #0
+ 454 03a0 0010A0E3 	.LVL28:
+ 455              	.L48:
+ 456              	.LBB6:
+ 457              		.loc 1 399 0
+ 458              		ldr	r3, [sp, #280]
+ 459 03a4 18319DE5 		ldrb	r2, [r0, #40]	@ zero_extendqisi2
+ 460 03a8 2820D0E5 		add	r3, r3, r1
+ 461 03ac 013083E0 		.loc 1 398 0
+ 462              		add	r1, r1, #1
+ 463 03b0 011081E2 		cmp	r1, #16
+ 464 03b4 100051E3 		.loc 1 399 0
+ 465              		strb	r2, [r3, #14]
+ 466 03b8 0E20C3E5 		.loc 1 398 0
+ 467              		add	r0, r0, #1
+ 468 03bc 010080E2 		bne	.L48
+ 469 03c0 F7FFFF1A 	.LBE6:
+ 470              		.loc 1 400 0
+ 471              		ldrb	r3, [lr, #80]	@ zero_extendqisi2
+ 472 03c4 5030DEE5 		ldr	r1, [sp, #280]
+ 473 03c8 18119DE5 	.LVL29:
+ 474              		strb	r3, [r1, #30]
+ 475 03cc 1E30C1E5 		ldrb	r2, [lr, #81]	@ zero_extendqisi2
+ 476 03d0 5120DEE5 		strb	r2, [r1, #31]
+ 477 03d4 1F20C1E5 		.loc 1 401 0
+ 478              		ldr	r0, [sp, #280]
+ 479 03d8 18019DE5 		ldrb	r3, [lr, #88]	@ zero_extendqisi2
+ 480 03dc 5830DEE5 		strb	r3, [r0, #32]
+ 481 03e0 2030C0E5 		ldrb	r2, [lr, #89]	@ zero_extendqisi2
+ 482 03e4 5920DEE5 		strb	r2, [r0, #33]
+ 483 03e8 2120C0E5 		.loc 1 402 0
+ 484              		ldr	r1, [sp, #280]
+ 485 03ec 18119DE5 		ldrb	r3, [lr, #90]	@ zero_extendqisi2
+ 486 03f0 5A30DEE5 		strb	r3, [r1, #34]
+ 487 03f4 2230C1E5 		ldrb	r2, [lr, #91]	@ zero_extendqisi2
+ 488 03f8 5B20DEE5 		.loc 1 408 0
+ 489              		mov	r3, #62
+ 490 03fc 3E30A0E3 		.loc 1 402 0
+ 491              		strb	r2, [r1, #35]
+ 492 0400 2320C1E5 		.loc 1 407 0
+ 493              		mov	ip, #36
+ 494 0404 24C0A0E3 		.loc 1 410 0
+ 495              		mov	r2, #0
+ 496 0408 0020A0E3 		.loc 1 408 0
+ 497              		strb	r3, [r4, #1]
+ 498 040c 0130C4E5 		.loc 1 411 0
+ 499              		add	r3, r3, #60
+ 500 0410 3C3083E2 		.loc 1 413 0
+ 501              		mov	r1, ip
+ 502 0414 0C10A0E1 		.loc 1 410 0
+ 503              		strb	r2, [r4, #3]
+ 504 0418 0320C4E5 		.loc 1 411 0
+ 505              		strb	r3, [r4, #4]
+ 506 041c 0430C4E5 		.loc 1 413 0
+ 507              		add	r0, sp, #280
+ 508 0420 460F8DE2 		.loc 1 407 0
+ 509              		strb	ip, [r4, #0]
+ 510 0424 00C0C4E5 		.loc 1 410 0
+ 511              		strb	ip, [r4, #2]
+ 512 0428 02C0C4E5 		.loc 1 413 0
+ 513              		bl	HLC_Checksum
+ 514 042c FEFFFFEB 		.loc 1 417 0
+ 515              		mov	r3, #64
+ 516 0430 4030A0E3 		.loc 1 413 0
+ 517              		mov	r2, r0, lsr #8
+ 518 0434 2024A0E1 		.loc 1 417 0
+ 519              		strb	r3, [r5, #3]
+ 520 0438 0330C5E5 		.loc 1 416 0
+ 521              		sub	r3, r3, #4
+ 522 043c 043043E2 		.loc 1 413 0
+ 523              		strb	r0, [r5, #0]
+ 524 0440 0000C5E5 		.loc 1 419 0
+ 525              		mov	r1, #45
+ 526 0444 2D10A0E3 		mov	r0, r4
+ 527 0448 0400A0E1 		.loc 1 413 0
+ 528              		strb	r2, [r5, #1]
+ 529 044c 0120C5E5 		.loc 1 416 0
+ 530              		strb	r3, [r5, #2]
+ 531 0450 0230C5E5 		.loc 1 419 0
+ 532              		bl	UART_SendPacket_raw
+ 533 0454 FEFFFFEB 	.LVL30:
+ 534              	.L44:
+ 535              	.LBE4:
+ 536              		.loc 1 438 0
+ 537              		ldr	r2, .L114+48
+ 538 0458 C8259FE5 		mov	r3, #0
+ 539 045c 0030A0E3 		.loc 1 439 0
+ 540              		strh	r3, [r9, #0]	@ movhi
+ 541 0460 B030C9E1 		.loc 1 438 0
+ 542              		strb	r3, [r2, #0]
+ 543 0464 0030C2E5 		b	.L102
+ 544 0468 83FFFFEA 	.LVL31:
+ 545              	.L14:
+ 546              		.loc 1 160 0
+ 547              		cmp	fp, #62
+ 548 046c 3E005BE3 		moveq	r5, #2	@ movhi
+ 549 0470 0250A003 		streqh	r5, [r9, #0]	@ movhi
+ 550 0474 B050C901 		bne	.L50
+ 551 0478 9CFFFF1A 		b	.L102
+ 552 047c 7EFFFFEA 	.L112:
+ 553              		.loc 1 313 0
+ 554              		ldr	r1, .L114+48
+ 555 0480 A0159FE5 		ldrb	r1, [r1, #0]	@ zero_extendqisi2
+ 556 0484 0010D1E5 		cmp	r1, #0
+ 557 0488 000051E3 		str	r1, [sp, #44]
+ 558 048c 2C108DE5 		beq	.L113
+ 559 0490 0401000A 	.LVL32:
+ 560              	.L41:
+ 561              		.loc 1 373 0
+ 562              		ldr	r6, .L114+48
+ 563 0494 8C659FE5 		mov	r3, #0
+ 564 0498 0030A0E3 		.loc 1 374 0
+ 565              		strh	r3, [r9, #0]	@ movhi
+ 566 049c B030C9E1 		.loc 1 373 0
+ 567              		strb	r3, [r6, #0]
+ 568 04a0 0030C6E5 		b	.L102
+ 569 04a4 74FFFFEA 	.LVL33:
+ 570              	.L109:
+ 571              		.loc 1 166 0
+ 572              		ldr	r2, .L114+48
+ 573 04a8 78259FE5 		ldrb	r3, [r2, #0]	@ zero_extendqisi2
+ 574 04ac 0030D2E5 		cmp	r3, #0
+ 575 04b0 000053E3 		.loc 1 168 0
+ 576              		addeq	r3, r3, #1
+ 577 04b4 01308302 		.loc 1 167 0
+ 578              		moveq	r1, #2	@ movhi
+ 579 04b8 0210A003 		.loc 1 168 0
+ 580              		streqb	r3, [r2, #0]
+ 581 04bc 0030C205 		.loc 1 167 0
+ 582              		streqh	r1, [r9, #0]	@ movhi
+ 583 04c0 B010C901 		.loc 1 166 0
+ 584              		beq	.L102
+ 585 04c4 6CFFFF0A 		b	.L28
+ 586 04c8 76FFFFEA 	.L108:
+ 587              		.loc 1 456 0
+ 588              		ldr	r3, .L114+56
+ 589 04cc 5C359FE5 		mov	r2, #0
+ 590 04d0 0020A0E3 		.loc 1 457 0
+ 591              		strh	r2, [r9, #0]	@ movhi
+ 592 04d4 B020C9E1 		.loc 1 456 0
+ 593              		strb	r2, [r3, #1]
+ 594 04d8 0120C3E5 		b	.L54
+ 595 04dc 7BFFFFEA 	.L110:
+ 596              		.loc 1 171 0
+ 597              		ldr	r2, .L114+48
+ 598 04e0 40259FE5 		ldrb	sl, [r2, #0]	@ zero_extendqisi2
+ 599 04e4 00A0D2E5 		cmp	sl, #0
+ 600 04e8 00005AE3 		beq	.L32
+ 601 04ec B400000A 		.loc 1 173 0
+ 602              		ldr	r4, .L114+60
+ 603 04f0 3C459FE5 		.loc 1 172 0
+ 604              		ldr	r0, .L114+64
+ 605 04f4 3C059FE5 		bl	printf
+ 606 04f8 FEFFFFEB 		.loc 1 173 0
+ 607              		ldrh	r1, [r4, #0]
+ 608 04fc B010D4E1 		ldr	r0, .L114+68
+ 609 0500 34059FE5 		bl	printf
+ 610 0504 FEFFFFEB 		.loc 1 174 0
+ 611              		ldrh	r1, [r4, #2]
+ 612 0508 B210D4E1 		ldr	r0, .L114+72
+ 613 050c 2C059FE5 		bl	printf
+ 614 0510 FEFFFFEB 		.loc 1 175 0
+ 615              		ldrh	r1, [r4, #4]
+ 616 0514 B410D4E1 		ldr	r0, .L114+76
+ 617 0518 24059FE5 		bl	printf
+ 618 051c FEFFFFEB 		.loc 1 176 0
+ 619              		ldrh	r1, [r4, #6]
+ 620 0520 B610D4E1 		ldr	r0, .L114+80
+ 621 0524 1C059FE5 		bl	printf
+ 622 0528 FEFFFFEB 		.loc 1 177 0
+ 623              		ldrh	r1, [r4, #8]
+ 624 052c B810D4E1 		ldr	r0, .L114+84
+ 625 0530 14059FE5 		bl	printf
+ 626 0534 FEFFFFEB 		.loc 1 178 0
+ 627              		ldrh	r1, [r4, #10]
+ 628 0538 BA10D4E1 		ldr	r0, .L114+88
+ 629 053c 0C059FE5 		bl	printf
+ 630 0540 FEFFFFEB 	.LVL34:
+ 631              	.L34:
+ 632              		.loc 1 232 0
+ 633              		ldr	r5, .L114+48
+ 634 0544 DC549FE5 		mov	r3, #0
+ 635 0548 0030A0E3 		.loc 1 233 0
+ 636              		strh	r3, [r9, #0]	@ movhi
+ 637 054c B030C9E1 		.loc 1 232 0
+ 638              		strb	r3, [r5, #0]
+ 639 0550 0030C5E5 		b	.L102
+ 640 0554 48FFFFEA 	.LVL35:
+ 641              	.L111:
+ 642              		.loc 1 236 0
+ 643              		ldr	r6, .L114+48
+ 644 0558 C8649FE5 		ldrb	r6, [r6, #0]	@ zero_extendqisi2
+ 645 055c 0060D6E5 		cmp	r6, #0
+ 646 0560 000056E3 		str	r6, [sp, #92]
+ 647 0564 5C608DE5 		bne	.L41
+ 648 0568 C9FFFF1A 	.LBB7:
+ 649              		.loc 1 262 0
+ 650              		ldr	r4, .L114+52
+ 651 056c B8449FE5 		.loc 1 265 0
+ 652              		ldrb	r3, [r4, #8]	@ zero_extendqisi2
+ 653 0570 0830D4E5 		str	r3, [sp, #88]
+ 654 0574 58308DE5 		.loc 1 266 0
+ 655              		ldrb	r3, [r4, #10]	@ zero_extendqisi2
+ 656 0578 0A30D4E5 		.loc 1 265 0
+ 657              		ldrb	r6, [r4, #9]	@ zero_extendqisi2
+ 658 057c 0960D4E5 		.loc 1 266 0
+ 659              		str	r3, [sp, #80]
+ 660 0580 50308DE5 		.loc 1 267 0
+ 661              		ldrb	r3, [r4, #12]	@ zero_extendqisi2
+ 662 0584 0C30D4E5 		.loc 1 265 0
+ 663              		str	r6, [sp, #84]
+ 664 0588 54608DE5 		.loc 1 266 0
+ 665              		ldrb	r6, [r4, #11]	@ zero_extendqisi2
+ 666 058c 0B60D4E5 		.loc 1 267 0
+ 667              		str	r3, [sp, #72]
+ 668 0590 48308DE5 		.loc 1 268 0
+ 669              		ldrb	r3, [r4, #24]	@ zero_extendqisi2
+ 670 0594 1830D4E5 		.loc 1 266 0
+ 671              		str	r6, [sp, #76]
+ 672 0598 4C608DE5 		.loc 1 267 0
+ 673              		ldrb	r6, [r4, #13]	@ zero_extendqisi2
+ 674 059c 0D60D4E5 		.loc 1 268 0
+ 675              		str	r3, [sp, #64]
+ 676 05a0 40308DE5 		ldrb	r3, [r4, #26]	@ zero_extendqisi2
+ 677 05a4 1A30D4E5 		.loc 1 267 0
+ 678              		str	r6, [sp, #68]
+ 679 05a8 44608DE5 		.loc 1 268 0
+ 680              		ldrb	r6, [r4, #25]	@ zero_extendqisi2
+ 681 05ac 1960D4E5 		str	r3, [sp, #56]
+ 682 05b0 38308DE5 		.loc 1 269 0
+ 683              		ldrb	r3, [r4, #28]	@ zero_extendqisi2
+ 684 05b4 1C30D4E5 		.loc 1 264 0
+ 685              		ldrb	r5, [r4, #7]	@ zero_extendqisi2
+ 686 05b8 0750D4E5 		.loc 1 262 0
+ 687              		ldrb	r2, [r4, #2]	@ zero_extendqisi2
+ 688 05bc 0220D4E5 		ldrb	r1, [r4, #3]	@ zero_extendqisi2
+ 689 05c0 0310D4E5 		.loc 1 263 0
+ 690              		ldrb	r0, [r4, #4]	@ zero_extendqisi2
+ 691 05c4 0400D4E5 		ldrb	ip, [r4, #5]	@ zero_extendqisi2
+ 692 05c8 05C0D4E5 		.loc 1 264 0
+ 693              		ldrb	lr, [r4, #6]	@ zero_extendqisi2
+ 694 05cc 06E0D4E5 		.loc 1 268 0
+ 695              		str	r6, [sp, #60]
+ 696 05d0 3C608DE5 		ldrb	r6, [r4, #27]	@ zero_extendqisi2
+ 697 05d4 1B60D4E5 		.loc 1 269 0
+ 698              		str	r3, [sp, #48]
+ 699 05d8 30308DE5 		.loc 1 259 0
+ 700              		add	r3, sp, #137
+ 701 05dc 89308DE2 		.loc 1 268 0
+ 702              		str	r6, [sp, #52]
+ 703 05e0 34608DE5 		.loc 1 259 0
+ 704              		str	r3, [sp, #276]
+ 705 05e4 14318DE5 	.LVL36:
+ 706              		.loc 1 262 0
+ 707              		strb	r2, [sp, #137]
+ 708 05e8 8920CDE5 		strb	r1, [sp, #138]
+ 709 05ec 8A10CDE5 		.loc 1 263 0
+ 710              		strb	r0, [sp, #139]
+ 711 05f0 8B00CDE5 		strb	ip, [sp, #140]
+ 712 05f4 8CC0CDE5 		.loc 1 264 0
+ 713              		strb	lr, [sp, #141]
+ 714 05f8 8DE0CDE5 		strb	r5, [sp, #142]
+ 715 05fc 8E50CDE5 		.loc 1 265 0
+ 716              		ldr	r5, [sp, #88]
+ 717 0600 58509DE5 		ldr	r6, [sp, #84]
+ 718 0604 54609DE5 		strb	r5, [sp, #143]
+ 719 0608 8F50CDE5 		.loc 1 266 0
+ 720              		ldr	r1, [sp, #80]
+ 721 060c 50109DE5 		ldr	r2, [sp, #76]
+ 722 0610 4C209DE5 		.loc 1 267 0
+ 723              		ldr	r3, [sp, #72]
+ 724 0614 48309DE5 		ldr	r5, [sp, #68]
+ 725 0618 44509DE5 		.loc 1 265 0
+ 726              		strb	r6, [sp, #144]
+ 727 061c 9060CDE5 		.loc 1 266 0
+ 728              		strb	r1, [sp, #145]
+ 729 0620 9110CDE5 		strb	r2, [sp, #146]
+ 730 0624 9220CDE5 		.loc 1 267 0
+ 731              		strb	r3, [sp, #147]
+ 732 0628 9330CDE5 		strb	r5, [sp, #148]
+ 733 062c 9450CDE5 		.loc 1 268 0
+ 734              		add	r1, sp, #60
+ 735 0630 3C108DE2 		ldmia	r1, {r1, r6}	@ phole ldm
+ 736 0634 420091E8 		ldr	r2, [sp, #56]
+ 737 0638 38209DE5 		ldr	r3, [sp, #52]
+ 738 063c 34309DE5 		.loc 1 269 0
+ 739              		ldr	r5, [sp, #48]
+ 740 0640 30509DE5 		.loc 1 268 0
+ 741              		strb	r6, [sp, #149]
+ 742 0644 9560CDE5 		strb	r1, [sp, #150]
+ 743 0648 9610CDE5 		strb	r2, [sp, #151]
+ 744 064c 9720CDE5 		strb	r3, [sp, #152]
+ 745 0650 9830CDE5 		.loc 1 269 0
+ 746              		strb	r5, [sp, #153]
+ 747 0654 9950CDE5 		.loc 1 270 0
+ 748              		ldrb	ip, [r4, #61]	@ zero_extendqisi2
+ 749 0658 3DC0D4E5 		ldrb	lr, [r4, #62]	@ zero_extendqisi2
+ 750 065c 3EE0D4E5 		ldrb	r5, [r4, #63]	@ zero_extendqisi2
+ 751 0660 3F50D4E5 		.loc 1 269 0
+ 752              		ldrb	r3, [r4, #29]	@ zero_extendqisi2
+ 753 0664 1D30D4E5 		ldrb	r2, [r4, #30]	@ zero_extendqisi2
+ 754 0668 1E20D4E5 		ldrb	r1, [r4, #31]	@ zero_extendqisi2
+ 755 066c 1F10D4E5 		.loc 1 270 0
+ 756              		ldrb	r0, [r4, #60]	@ zero_extendqisi2
+ 757 0670 3C00D4E5 		.loc 1 269 0
+ 758              		strb	r3, [sp, #154]
+ 759 0674 9A30CDE5 		strb	r2, [sp, #155]
+ 760 0678 9B20CDE5 		strb	r1, [sp, #156]
+ 761 067c 9C10CDE5 		.loc 1 271 0
+ 762              		ldr	r3, .L114+92
+ 763 0680 CC339FE5 		.loc 1 270 0
+ 764              		strb	r0, [sp, #157]
+ 765 0684 9D00CDE5 		strb	ip, [sp, #158]
+ 766 0688 9EC0CDE5 		strb	lr, [sp, #159]
+ 767 068c 9FE0CDE5 		strb	r5, [sp, #160]
+ 768 0690 A050CDE5 		.loc 1 271 0
+ 769              		ldmia	r3, {r1-r2}
+ 770 0694 060093E8 		str	r1, [sp, #112]
+ 771 0698 70108DE5 		str	r2, [sp, #116]
+ 772 069c 74208DE5 		bl	peripheralClockFrequency
+ 773 06a0 FEFFFFEB 		mov	r2, r0
+ 774 06a4 0020A0E1 		mov	r3, #0
+ 775 06a8 0030A0E3 		add	r0, sp, #112
+ 776 06ac 70008DE2 		ldmia	r0, {r0-r1}
+ 777 06b0 030090E8 		bl	__divdi3
+ 778 06b4 FEFFFFEB 		mov	r3, r0, lsr #8
+ 779 06b8 2034A0E1 		strb	r3, [sp, #162]
+ 780 06bc A230CDE5 		.loc 1 272 0
+ 781              		ldr	r2, .L114+96
+ 782 06c0 90239FE5 		ldmia	r2, {r5-r6}
+ 783 06c4 600092E8 		str	r5, [sp, #120]
+ 784 06c8 78508DE5 		str	r6, [sp, #124]
+ 785 06cc 7C608DE5 		ldr	r6, [sp, #276]
+ 786 06d0 14619DE5 		.loc 1 271 0
+ 787              		strb	r0, [sp, #161]
+ 788 06d4 A100CDE5 		.loc 1 272 0
+ 789              		str	r6, [sp, #128]
+ 790 06d8 80608DE5 		bl	peripheralClockFrequency
+ 791 06dc FEFFFFEB 		mov	r2, r0
+ 792 06e0 0020A0E1 		mov	r3, #0
+ 793 06e4 0030A0E3 		add	r0, sp, #120
+ 794 06e8 78008DE2 		ldmia	r0, {r0-r1}
+ 795 06ec 030090E8 		bl	__divdi3
+ 796 06f0 FEFFFFEB 		mov	r3, r0, lsr #8
+ 797 06f4 2034A0E1 		strb	r3, [r6, #27]
+ 798 06f8 1B30C6E5 		strb	r0, [r6, #26]
+ 799 06fc 1A00C6E5 		.loc 1 273 0
+ 800              		ldr	r1, [sp, #276]
+ 801 0700 14119DE5 		ldrb	r3, [r4, #64]	@ zero_extendqisi2
+ 802 0704 4030D4E5 		strb	r3, [r1, #28]
+ 803 0708 1C30C1E5 		ldrb	r2, [r4, #65]	@ zero_extendqisi2
+ 804 070c 4120D4E5 		strb	r2, [r1, #29]
+ 805 0710 1D20C1E5 		.loc 1 274 0
+ 806              		ldr	r0, [sp, #276]
+ 807 0714 14019DE5 		ldrb	r3, [r4, #32]	@ zero_extendqisi2
+ 808 0718 2030D4E5 		strb	r3, [r0, #30]
+ 809 071c 1E30C0E5 		ldrb	r2, [r4, #33]	@ zero_extendqisi2
+ 810 0720 2120D4E5 		strb	r2, [r0, #31]
+ 811 0724 1F20C0E5 		.loc 1 275 0
+ 812              		ldr	r1, [sp, #276]
+ 813 0728 14119DE5 		ldrb	r3, [r4, #34]	@ zero_extendqisi2
+ 814 072c 2230D4E5 		strb	r3, [r1, #32]
+ 815 0730 2030C1E5 		ldrb	r2, [r4, #35]	@ zero_extendqisi2
+ 816 0734 2320D4E5 		strb	r2, [r1, #33]
+ 817 0738 2120C1E5 		.loc 1 276 0
+ 818              		ldr	r0, [sp, #276]
+ 819 073c 14019DE5 		ldrb	r3, [r4, #36]	@ zero_extendqisi2
+ 820 0740 2430D4E5 		strb	r3, [r0, #34]
+ 821 0744 2230C0E5 		ldrb	r2, [r4, #37]	@ zero_extendqisi2
+ 822 0748 2520D4E5 		strb	r2, [r0, #35]
+ 823 074c 2320C0E5 		.loc 1 277 0
+ 824              		ldr	r1, [sp, #276]
+ 825 0750 14119DE5 		ldrb	r3, [r4, #82]	@ zero_extendqisi2
+ 826 0754 5230D4E5 		strb	r3, [r1, #36]
+ 827 0758 2430C1E5 		ldrb	r2, [r4, #83]	@ zero_extendqisi2
+ 828 075c 5320D4E5 		.loc 1 282 0
+ 829              		ldr	r3, [sp, #92]
+ 830 0760 5C309DE5 		.loc 1 277 0
+ 831              		strb	r2, [r1, #37]
+ 832 0764 2520C1E5 		.loc 1 282 0
+ 833              		orr	ip, r3, #38
+ 834 0768 26C083E3 		ldr	r5, [sp, #92]
+ 835 076c 5C509DE5 		.loc 1 285 0
+ 836              		mov	r1, ip
+ 837 0770 0C10A0E1 		.loc 1 279 0
+ 838              		mov	r3, #36
+ 839 0774 2430A0E3 		.loc 1 280 0
+ 840              		mov	r2, #62
+ 841 0778 3E20A0E3 		.loc 1 285 0
+ 842              		add	r0, sp, #276
+ 843 077c 450F8DE2 		.loc 1 279 0
+ 844              		strb	r3, [sp, #132]
+ 845 0780 8430CDE5 		.loc 1 280 0
+ 846              		strb	r2, [sp, #133]
+ 847 0784 8520CDE5 		.loc 1 282 0
+ 848              		strb	r5, [sp, #135]
+ 849 0788 8750CDE5 		.loc 1 283 0
+ 850              		strb	fp, [sp, #136]
+ 851 078c 88B0CDE5 		.loc 1 282 0
+ 852              		strb	ip, [sp, #134]
+ 853 0790 86C0CDE5 		.loc 1 285 0
+ 854              		bl	HLC_Checksum
+ 855 0794 FEFFFFEB 		mov	r2, r0, lsr #8
+ 856 0798 2024A0E1 		strb	r0, [sp, #175]
+ 857 079c AF00CDE5 		strb	r2, [sp, #176]
+ 858 07a0 B020CDE5 		.loc 1 286 0
+ 859              		mov	r3, #60
+ 860 07a4 3C30A0E3 		.loc 1 287 0
+ 861              		mov	r2, #64
+ 862 07a8 4020A0E3 		.loc 1 290 0
+ 863              		add	r0, sp, #132
+ 864 07ac 84008DE2 	.LVL37:
+ 865              		mov	r1, #47
+ 866 07b0 2F10A0E3 		.loc 1 286 0
+ 867              		strb	r3, [sp, #177]
+ 868 07b4 B130CDE5 		.loc 1 287 0
+ 869              		strb	r2, [sp, #178]
+ 870 07b8 B220CDE5 		.loc 1 290 0
+ 871              		bl	UART_SendPacket_raw
+ 872 07bc FEFFFFEB 	.LVL38:
+ 873              		b	.L41
+ 874 07c0 33FFFFEA 	.LVL39:
+ 875              	.L32:
+ 876              	.LBE7:
+ 877              	.LBB8:
+ 878              		.loc 1 187 0
+ 879              		ldr	r3, .L114+60
+ 880 07c4 68329FE5 		.loc 1 191 0
+ 881              		ldrb	r6, [r3, #5]	@ zero_extendqisi2
+ 882 07c8 0560D3E5 		.loc 1 194 0
+ 883              		ldrb	r5, [r3, #11]	@ zero_extendqisi2
+ 884 07cc 0B50D3E5 		.loc 1 192 0
+ 885              		ldrb	r1, [r3, #6]	@ zero_extendqisi2
+ 886 07d0 0610D3E5 		.loc 1 191 0
+ 887              		str	r6, [sp, #108]
+ 888 07d4 6C608DE5 		.loc 1 192 0
+ 889              		ldrb	r6, [r3, #7]	@ zero_extendqisi2
+ 890 07d8 0760D3E5 		.loc 1 187 0
+ 891              		ldrb	r2, [r3, #0]	@ zero_extendqisi2
+ 892 07dc 0020D3E5 		ldrb	ip, [r3, #1]	@ zero_extendqisi2
+ 893 07e0 01C0D3E5 		.loc 1 189 0
+ 894              		ldrb	lr, [r3, #2]	@ zero_extendqisi2
+ 895 07e4 02E0D3E5 		ldrb	r4, [r3, #3]	@ zero_extendqisi2
+ 896 07e8 0340D3E5 		.loc 1 193 0
+ 897              		ldrb	r8, [r3, #8]	@ zero_extendqisi2
+ 898 07ec 0880D3E5 		ldrb	r7, [r3, #9]	@ zero_extendqisi2
+ 899 07f0 0970D3E5 		.loc 1 194 0
+ 900              		str	r5, [sp, #96]
+ 901 07f4 60508DE5 		.loc 1 192 0
+ 902              		str	r1, [sp, #104]
+ 903 07f8 68108DE5 		.loc 1 191 0
+ 904              		ldrb	r5, [r3, #4]	@ zero_extendqisi2
+ 905 07fc 0450D3E5 		.loc 1 192 0
+ 906              		str	r6, [sp, #100]
+ 907 0800 64608DE5 		.loc 1 194 0
+ 908              		ldrb	r6, [r3, #10]	@ zero_extendqisi2
+ 909 0804 0A60D3E5 		.loc 1 183 0
+ 910              		add	r3, sp, #256
+ 911 0808 013C8DE2 		str	r3, [sp, #284]
+ 912 080c 1C318DE5 	.LVL40:
+ 913              		.loc 1 187 0
+ 914              		strb	r2, [sp, #256]
+ 915 0810 0021CDE5 		.loc 1 192 0
+ 916              		ldr	r3, [sp, #104]
+ 917 0814 68309DE5 		.loc 1 191 0
+ 918              		ldr	r2, [sp, #108]
+ 919 0818 6C209DE5 		strb	r5, [sp, #260]
+ 920 081c 0451CDE5 		.loc 1 194 0
+ 921              		strb	r6, [sp, #266]
+ 922 0820 0A61CDE5 		.loc 1 192 0
+ 923              		ldr	r5, [sp, #100]
+ 924 0824 64509DE5 		.loc 1 194 0
+ 925              		ldr	r6, [sp, #96]
+ 926 0828 60609DE5 		.loc 1 191 0
+ 927              		strb	r2, [sp, #261]
+ 928 082c 0521CDE5 		.loc 1 192 0
+ 929              		strb	r3, [sp, #262]
+ 930 0830 0631CDE5 		.loc 1 200 0
+ 931              		mov	r2, #62
+ 932 0834 3E20A0E3 		.loc 1 199 0
+ 933              		mov	r3, #36
+ 934 0838 2430A0E3 		.loc 1 187 0
+ 935              		strb	ip, [sp, #257]
+ 936 083c 01C1CDE5 		.loc 1 189 0
+ 937              		strb	lr, [sp, #258]
+ 938 0840 02E1CDE5 		.loc 1 205 0
+ 939              		mov	r1, #12
+ 940 0844 0C10A0E3 		add	r0, sp, #284
+ 941 0848 470F8DE2 		.loc 1 189 0
+ 942              		strb	r4, [sp, #259]
+ 943 084c 0341CDE5 		.loc 1 192 0
+ 944              		strb	r5, [sp, #263]
+ 945 0850 0751CDE5 		.loc 1 193 0
+ 946              		strb	r8, [sp, #264]
+ 947 0854 0881CDE5 		strb	r7, [sp, #265]
+ 948 0858 0971CDE5 		.loc 1 194 0
+ 949              		strb	r6, [sp, #267]
+ 950 085c 0B61CDE5 		.loc 1 199 0
+ 951              		strb	r3, [sp, #251]
+ 952 0860 FB30CDE5 		.loc 1 200 0
+ 953              		strb	r2, [sp, #252]
+ 954 0864 FC20CDE5 		.loc 1 201 0
+ 955              		mov	r2, #12
+ 956 0868 0C20A0E3 		strb	r2, [sp, #253]
+ 957 086c FD20CDE5 		strb	sl, [sp, #254]
+ 958 0870 FEA0CDE5 		.loc 1 202 0
+ 959              		strb	fp, [sp, #255]
+ 960 0874 FFB0CDE5 		.loc 1 205 0
+ 961              		bl	HLC_Checksum
+ 962 0878 FEFFFFEB 		mov	r2, r0, lsr #8
+ 963 087c 2024A0E1 		strb	r0, [sp, #268]
+ 964 0880 0C01CDE5 		strb	r2, [sp, #269]
+ 965 0884 0D21CDE5 		.loc 1 206 0
+ 966              		mov	r3, #60
+ 967 0888 3C30A0E3 		.loc 1 207 0
+ 968              		mov	r2, #64
+ 969 088c 4020A0E3 		.loc 1 210 0
+ 970              		add	r0, sp, #251
+ 971 0890 FB008DE2 	.LVL41:
+ 972              		mov	r1, #21
+ 973 0894 1510A0E3 		.loc 1 206 0
+ 974              		strb	r3, [sp, #270]
+ 975 0898 0E31CDE5 		.loc 1 207 0
+ 976              		strb	r2, [sp, #271]
+ 977 089c 0F21CDE5 		.loc 1 210 0
+ 978              		bl	UART_SendPacket_raw
+ 979 08a0 FEFFFFEB 	.LVL42:
+ 980              		b	.L34
+ 981 08a4 26FFFFEA 	.LVL43:
+ 982              	.L113:
+ 983              	.LBE8:
+ 984              	.LBB9:
+ 985              		.loc 1 332 0
+ 986              		ldr	r3, .L114+52
+ 987 08a8 7C319FE5 		.loc 1 335 0
+ 988              		ldrb	r2, [r3, #76]	@ zero_extendqisi2
+ 989 08ac 4C20D3E5 		str	r2, [sp, #40]
+ 990 08b0 28208DE5 		.loc 1 336 0
+ 991              		ldrb	r2, [r3, #72]	@ zero_extendqisi2
+ 992 08b4 4820D3E5 		.loc 1 335 0
+ 993              		ldrb	r6, [r3, #77]	@ zero_extendqisi2
+ 994 08b8 4D60D3E5 		.loc 1 336 0
+ 995              		str	r2, [sp, #32]
+ 996 08bc 20208DE5 		.loc 1 337 0
+ 997              		ldrb	r2, [r3, #74]	@ zero_extendqisi2
+ 998 08c0 4A20D3E5 		.loc 1 335 0
+ 999              		str	r6, [sp, #36]
+ 1000 08c4 24608DE5 		.loc 1 336 0
+ 1001              		ldrb	r6, [r3, #73]	@ zero_extendqisi2
+ 1002 08c8 4960D3E5 		.loc 1 337 0
+ 1003              		str	r2, [sp, #24]
+ 1004 08cc 18208DE5 		.loc 1 338 0
+ 1005              		ldrb	r2, [r3, #78]	@ zero_extendqisi2
+ 1006 08d0 4E20D3E5 		.loc 1 336 0
+ 1007              		str	r6, [sp, #28]
+ 1008 08d4 1C608DE5 		.loc 1 337 0
+ 1009              		ldrb	r6, [r3, #75]	@ zero_extendqisi2
+ 1010 08d8 4B60D3E5 		.loc 1 338 0
+ 1011              		str	r2, [sp, #16]
+ 1012 08dc 10208DE5 		.loc 1 339 0
+ 1013              		ldrb	r2, [r3, #84]	@ zero_extendqisi2
+ 1014 08e0 5420D3E5 		.loc 1 337 0
+ 1015              		str	r6, [sp, #20]
+ 1016 08e4 14608DE5 		.loc 1 338 0
+ 1017              		ldrb	r6, [r3, #79]	@ zero_extendqisi2
+ 1018 08e8 4F60D3E5 		.loc 1 339 0
+ 1019              		str	r2, [sp, #8]
+ 1020 08ec 08208DE5 		.loc 1 340 0
+ 1021              		ldrb	r2, [r3, #86]	@ zero_extendqisi2
+ 1022 08f0 5620D3E5 		.loc 1 333 0
+ 1023              		ldrb	lr, [r3, #69]	@ zero_extendqisi2
+ 1024 08f4 45E0D3E5 		.loc 1 334 0
+ 1025              		ldrb	r5, [r3, #71]	@ zero_extendqisi2
+ 1026 08f8 4750D3E5 		.loc 1 332 0
+ 1027              		ldrb	r1, [r3, #66]	@ zero_extendqisi2
+ 1028 08fc 4210D3E5 		ldrb	r0, [r3, #67]	@ zero_extendqisi2
+ 1029 0900 4300D3E5 		.loc 1 333 0
+ 1030              		ldrb	ip, [r3, #68]	@ zero_extendqisi2
+ 1031 0904 44C0D3E5 		.loc 1 334 0
+ 1032              		ldrb	r4, [r3, #70]	@ zero_extendqisi2
+ 1033 0908 4640D3E5 		.loc 1 338 0
+ 1034              		str	r6, [sp, #12]
+ 1035 090c 0C608DE5 		.loc 1 339 0
+ 1036              		ldrb	r6, [r3, #85]	@ zero_extendqisi2
+ 1037 0910 5560D3E5 		.loc 1 340 0
+ 1038              		str	r2, [sp, #0]
+ 1039 0914 00208DE5 		.loc 1 329 0
+ 1040              		add	r2, sp, #229
+ 1041 0918 E5208DE2 		.loc 1 339 0
+ 1042              		str	r6, [sp, #4]
+ 1043 091c 04608DE5 		.loc 1 329 0
+ 1044              		str	r2, [sp, #272]
+ 1045 0920 10218DE5 	.LVL44:
+ 1046              		.loc 1 332 0
+ 1047              		strb	r1, [sp, #229]
+ 1048 0924 E510CDE5 		strb	r0, [sp, #230]
+ 1049 0928 E600CDE5 		.loc 1 333 0
+ 1050              		strb	ip, [sp, #231]
+ 1051 092c E7C0CDE5 		strb	lr, [sp, #232]
+ 1052 0930 E8E0CDE5 		.loc 1 334 0
+ 1053              		strb	r4, [sp, #233]
+ 1054 0934 E940CDE5 		strb	r5, [sp, #234]
+ 1055 0938 EA50CDE5 		.loc 1 335 0
+ 1056              		ldr	r6, [sp, #36]
+ 1057 093c 24609DE5 		ldr	r5, [sp, #40]
+ 1058 0940 28509DE5 		.loc 1 336 0
+ 1059              		ldr	r1, [sp, #32]
+ 1060 0944 20109DE5 		.loc 1 335 0
+ 1061              		strb	r5, [sp, #235]
+ 1062 0948 EB50CDE5 		strb	r6, [sp, #236]
+ 1063 094c EC60CDE5 		.loc 1 336 0
+ 1064              		strb	r1, [sp, #237]
+ 1065 0950 ED10CDE5 		ldr	r2, [sp, #28]
+ 1066 0954 1C209DE5 		.loc 1 337 0
+ 1067              		ldr	r5, [sp, #24]
+ 1068 0958 18509DE5 		add	r1, sp, #16
+ 1069 095c 10108DE2 		ldmia	r1, {r1, r6}	@ phole ldm
+ 1070 0960 420091E8 		.loc 1 336 0
+ 1071              		strb	r2, [sp, #238]
+ 1072 0964 EE20CDE5 		.loc 1 337 0
+ 1073              		strb	r5, [sp, #239]
+ 1074 0968 EF50CDE5 		strb	r6, [sp, #240]
+ 1075 096c F060CDE5 		.loc 1 338 0
+ 1076              		strb	r1, [sp, #241]
+ 1077 0970 F110CDE5 		ldr	r2, [sp, #12]
+ 1078 0974 0C209DE5 		.loc 1 339 0
+ 1079              		ldr	r5, [sp, #8]
+ 1080 0978 08509DE5 		.loc 1 340 0
+ 1081              		ldmia	sp, {r1, r6}	@ phole ldm
+ 1082 097c 42009DE8 		.loc 1 339 0
+ 1083              		strb	r5, [sp, #243]
+ 1084 0980 F350CDE5 		.loc 1 340 0
+ 1085              		strb	r1, [sp, #245]
+ 1086 0984 F510CDE5 		.loc 1 338 0
+ 1087              		strb	r2, [sp, #242]
+ 1088 0988 F220CDE5 		.loc 1 339 0
+ 1089              		strb	r6, [sp, #244]
+ 1090 098c F460CDE5 		.loc 1 340 0
+ 1091              		ldrb	r2, [r3, #87]	@ zero_extendqisi2
+ 1092 0990 5720D3E5 		.loc 1 345 0
+ 1093              		ldr	r3, [sp, #44]
+ 1094 0994 2C309DE5 		ldr	r5, [sp, #44]
+ 1095 0998 2C509DE5 		orr	ip, r3, #18
+ 1096 099c 12C083E3 		.loc 1 348 0
+ 1097              		mov	r1, ip
+ 1098 09a0 0C10A0E1 		.loc 1 340 0
+ 1099              		strb	r2, [sp, #246]
+ 1100 09a4 F620CDE5 		.loc 1 343 0
+ 1101              		mov	r3, #36
+ 1102 09a8 2430A0E3 		.loc 1 344 0
+ 1103              		mov	r2, #62
+ 1104 09ac 3E20A0E3 		.loc 1 348 0
+ 1105              		add	r0, sp, #272
+ 1106 09b0 110E8DE2 		.loc 1 343 0
+ 1107              		strb	r3, [sp, #224]
+ 1108 09b4 E030CDE5 		.loc 1 344 0
+ 1109              		strb	r2, [sp, #225]
+ 1110 09b8 E120CDE5 		.loc 1 345 0
+ 1111              		strb	r5, [sp, #227]
+ 1112 09bc E350CDE5 		.loc 1 346 0
+ 1113              		strb	fp, [sp, #228]
+ 1114 09c0 E4B0CDE5 		.loc 1 345 0
+ 1115              		strb	ip, [sp, #226]
+ 1116 09c4 E2C0CDE5 		.loc 1 348 0
+ 1117              		bl	HLC_Checksum
+ 1118 09c8 FEFFFFEB 		mov	r2, r0, lsr #8
+ 1119 09cc 2024A0E1 		strb	r0, [sp, #247]
+ 1120 09d0 F700CDE5 		strb	r2, [sp, #248]
+ 1121 09d4 F820CDE5 		.loc 1 349 0
+ 1122              		mov	r3, #60
+ 1123 09d8 3C30A0E3 		.loc 1 350 0
+ 1124              		mov	r2, #64
+ 1125 09dc 4020A0E3 		.loc 1 353 0
+ 1126              		add	r0, sp, #224
+ 1127 09e0 E0008DE2 	.LVL45:
+ 1128              		mov	r1, #27
+ 1129 09e4 1B10A0E3 		.loc 1 349 0
+ 1130              		strb	r3, [sp, #249]
+ 1131 09e8 F930CDE5 		.loc 1 350 0
+ 1132              		strb	r2, [sp, #250]
+ 1133 09ec FA20CDE5 		.loc 1 353 0
+ 1134              		bl	UART_SendPacket_raw
+ 1135 09f0 FEFFFFEB 	.LVL46:
+ 1136              		b	.L41
+ 1137 09f4 A6FEFFEA 	.L115:
+ 1138              		.align	2
+ 1139              	.L114:
+ 1140              		.word	controlState
+ 1141 09f8 00000000 		.word	byteIndex
+ 1142 09fc 00000000 		.word	ctrlEnabled
+ 1143 0a00 00000000 		.word	WO_CTRL_Input
+ 1144 0a04 00000000 		.word	ctrlMode
+ 1145 0a08 00000000 		.word	packetSize
+ 1146 0a0c 00000000 		.word	WO_CTRL_Input+1
+ 1147 0a10 01000000 		.word	WO_CTRL_Input+2
+ 1148 0a14 02000000 		.word	WO_CTRL_Input+3
+ 1149 0a18 03000000 		.word	WO_CTRL_Input+4
+ 1150 0a1c 04000000 		.word	WO_CTRL_Input+5
+ 1151 0a20 05000000 		.word	WO_CTRL_Input+6
+ 1152 0a24 06000000 		.word	verboseMode
+ 1153 0a28 00000000 		.word	LL_1khz_attitude_data
+ 1154 0a2c 00000000 		.word	WO_SDK
+ 1155 0a30 00000000 		.word	RO_RC_Data
+ 1156 0a34 00000000 		.word	.LC0
+ 1157 0a38 00000000 		.word	.LC1
+ 1158 0a3c 0C000000 		.word	.LC2
+ 1159 0a40 28000000 		.word	.LC3
+ 1160 0a44 40000000 		.word	.LC4
+ 1161 0a48 5C000000 		.word	.LC5
+ 1162 0a4c 74000000 		.word	.LC6
+ 1163 0a50 90000000 		.word	x_vel
+ 1164 0a54 00000000 		.word	y_vel
+ 1165 0a58 00000000 	.LBE9:
+ 1166              	.LFE3:
+ 1168              		.global	__floatsidf
+ 1169              		.global	__muldf3
+ 1170              		.global	__divdf3
+ 1171              		.global	__subdf3
+ 1172              		.global	__cmpdi2
+ 1173              		.global	__floatdidf
+ 1174              		.global	__adddf3
+ 1175              		.global	__fixdfdi
+ 1176              		.global	__fixdfsi
+ 1177              		.align	2
+ 1178              		.global	SDK_mainloop
+ 1180              	SDK_mainloop:
+ 1181              	.LFB2:
+ 1182              		.loc 1 56 0
+ 1183              		@ Function supports interworking.
+ 1184              		@ args = 0, pretend = 0, frame = 12
+ 1185              		@ frame_needed = 0, uses_anonymous_args = 0
+ 1186              		stmfd	sp!, {r4, r5, r6, r7, r8, r9, sl, fp, lr}
+ 1187 0a5c F04F2DE9 	.LCFI2:
+ 1188              		.loc 1 88 0
+ 1189              		ldr	r2, .L123+24
+ 1190 0a60 10239FE5 		.loc 1 87 0
+ 1191              		ldr	r3, .L123+28
+ 1192 0a64 10339FE5 		.loc 1 93 0
+ 1193              		ldr	r6, .L123+32
+ 1194 0a68 10639FE5 		.loc 1 87 0
+ 1195              		ldrb	ip, [r3, #0]	@ zero_extendqisi2
+ 1196 0a6c 00C0D3E5 		.loc 1 88 0
+ 1197              		ldrb	r1, [r2, #0]	@ zero_extendqisi2
+ 1198 0a70 0010D2E5 		.loc 1 87 0
+ 1199              		ldr	r3, .L123+36
+ 1200 0a74 08339FE5 		.loc 1 56 0
+ 1201              		sub	sp, sp, #12
+ 1202 0a78 0CD04DE2 	.LCFI3:
+ 1203              		.loc 1 87 0
+ 1204              		strb	ip, [r3, #0]
+ 1205 0a7c 00C0C3E5 		.loc 1 93 0
+ 1206              		ldrsh	r0, [r6, #4]
+ 1207 0a80 F400D6E1 		.loc 1 88 0
+ 1208              		strb	r1, [r3, #1]
+ 1209 0a84 0110C3E5 		.loc 1 93 0
+ 1210              		bl	__floatsidf
+ 1211 0a88 FEFFFFEB 		adr	r2, .L123
+ 1212 0a8c B32F8FE2 		ldmia	r2, {r2-r3}
+ 1213 0a90 0C0092E8 		bl	__muldf3
+ 1214 0a94 FEFFFFEB 		mov	r2, #1090519040
+ 1215 0a98 4124A0E3 		add	r2, r2, #389120
+ 1216 0a9c 5F2A82E2 		add	r2, r2, #2304
+ 1217 0aa0 092C82E2 		mov	r3, #0
+ 1218 0aa4 0030A0E3 		bl	__divdf3
+ 1219 0aa8 FEFFFFEB 		mov	r9, r0
+ 1220 0aac 0090A0E1 		.loc 1 97 0
+ 1221              		ldrsh	r0, [r6, #32]
+ 1222 0ab0 F002D6E1 		rsb	r0, r0, #0
+ 1223 0ab4 000060E2 		.loc 1 93 0
+ 1224              		mov	sl, r1
+ 1225 0ab8 01A0A0E1 		.loc 1 97 0
+ 1226              		bl	__floatsidf
+ 1227 0abc FEFFFFEB 		mov	r7, r0
+ 1228 0ac0 0070A0E1 		mov	r8, r1
+ 1229 0ac4 0180A0E1 		.loc 1 94 0
+ 1230              		mov	r0, r9
+ 1231 0ac8 0900A0E1 	.LVL47:
+ 1232              		mov	r1, sl
+ 1233 0acc 0A10A0E1 	.LVL48:
+ 1234              		bl	cos
+ 1235 0ad0 FEFFFFEB 	.LVL49:
+ 1236              		adr	r2, .L123+8
+ 1237 0ad4 A32F8FE2 		ldmia	r2, {r2-r3}
+ 1238 0ad8 0C0092E8 		bl	__muldf3
+ 1239 0adc FEFFFFEB 		mov	r4, r0
+ 1240 0ae0 0040A0E1 		ldrsh	r0, [r6, #2]
+ 1241 0ae4 F200D6E1 		mov	r5, r1
+ 1242 0ae8 0150A0E1 		bl	__floatsidf
+ 1243 0aec FEFFFFEB 		adr	r2, .L123
+ 1244 0af0 9A2F8FE2 		ldmia	r2, {r2-r3}
+ 1245 0af4 0C0092E8 		bl	__muldf3
+ 1246 0af8 FEFFFFEB 		mov	r2, #1090519040
+ 1247 0afc 4124A0E3 		add	r2, r2, #389120
+ 1248 0b00 5F2A82E2 		add	r2, r2, #2304
+ 1249 0b04 092C82E2 		mov	r3, #0
+ 1250 0b08 0030A0E3 		bl	__divdf3
+ 1251 0b0c FEFFFFEB 		bl	sin
+ 1252 0b10 FEFFFFEB 		mov	r2, r0
+ 1253 0b14 0020A0E1 		mov	r3, r1
+ 1254 0b18 0130A0E1 		mov	r0, r4
+ 1255 0b1c 0400A0E1 		mov	r1, r5
+ 1256 0b20 0510A0E1 		bl	__muldf3
+ 1257 0b24 FEFFFFEB 		mov	r2, r0
+ 1258 0b28 0020A0E1 		mov	r3, r1
+ 1259 0b2c 0130A0E1 		mov	r0, r7
+ 1260 0b30 0700A0E1 		mov	r1, r8
+ 1261 0b34 0810A0E1 		bl	__subdf3
+ 1262 0b38 FEFFFFEB 		stmia	sp, {r0-r1}
+ 1263 0b3c 03008DE8 	.LVL50:
+ 1264              		.loc 1 98 0
+ 1265              		ldrsh	r0, [r6, #34]
+ 1266 0b40 F202D6E1 		bl	__floatsidf
+ 1267 0b44 FEFFFFEB 		mov	r4, r0
+ 1268 0b48 0040A0E1 		mov	r5, r1
+ 1269 0b4c 0150A0E1 		.loc 1 95 0
+ 1270              		mov	r0, r9
+ 1271 0b50 0900A0E1 	.LVL51:
+ 1272              		mov	r1, sl
+ 1273 0b54 0A10A0E1 	.LVL52:
+ 1274              		bl	sin
+ 1275 0b58 FEFFFFEB 	.LVL53:
+ 1276              		adr	r2, .L123+16
+ 1277 0b5c 832F8FE2 		ldmia	r2, {r2-r3}
+ 1278 0b60 0C0092E8 		bl	__muldf3
+ 1279 0b64 FEFFFFEB 		mov	r2, r0
+ 1280 0b68 0020A0E1 		mov	r3, r1
+ 1281 0b6c 0130A0E1 		mov	r0, r4
+ 1282 0b70 0400A0E1 		mov	r1, r5
+ 1283 0b74 0510A0E1 		bl	__subdf3
+ 1284 0b78 FEFFFFEB 		mov	sl, r0
+ 1285 0b7c 00A0A0E1 	.LVL54:
+ 1286              		mov	fp, r1
+ 1287 0b80 01B0A0E1 	.LVL55:
+ 1288              		.loc 1 100 0
+ 1289              		bl	getSystemTicks
+ 1290 0b84 FEFFFFEB 		.loc 1 101 0
+ 1291              		ldr	r2, .L123+40
+ 1292 0b88 F8219FE5 		ldrb	r3, [r2, #0]	@ zero_extendqisi2
+ 1293 0b8c 0030D2E5 		cmp	r3, #0
+ 1294 0b90 000053E3 		.loc 1 100 0
+ 1295              		str	r0, [sp, #8]
+ 1296 0b94 08008DE5 	.LVL56:
+ 1297              		.loc 1 101 0
+ 1298              		bne	.L117
+ 1299 0b98 4800001A 	.LBB10:
+ 1300              		.loc 1 103 0
+ 1301              		ldr	r1, .L123+44
+ 1302 0b9c E8119FE5 		ldr	r3, [r1, #0]
+ 1303 0ba0 003091E5 		rsb	r3, r3, r0
+ 1304 0ba4 003063E0 		mov	r5, r3
+ 1305 0ba8 0350A0E1 		mov	r6, #0
+ 1306 0bac 0060A0E3 		mov	r0, r5
+ 1307 0bb0 0500A0E1 		mov	r1, r6
+ 1308 0bb4 0610A0E1 		mov	r2, #0
+ 1309 0bb8 0020A0E3 		mov	r3, #0
+ 1310 0bbc 0030A0E3 		bl	__cmpdi2
+ 1311 0bc0 FEFFFFEB 		cmp	r0, #0
+ 1312 0bc4 000050E3 		ble	.L120
+ 1313 0bc8 550000DA 		mov	r0, r5
+ 1314 0bcc 0500A0E1 		mov	r1, r6
+ 1315 0bd0 0610A0E1 		bl	__floatdidf
+ 1316 0bd4 FEFFFFEB 		mov	r8, r0
+ 1317 0bd8 0080A0E1 		mov	r9, r1
+ 1318 0bdc 0190A0E1 	.L119:
+ 1319              		ldr	r6, .L123+48
+ 1320 0be0 A8619FE5 		ldmia	r6, {r0-r1}
+ 1321 0be4 030096E8 		bl	__floatdidf
+ 1322 0be8 FEFFFFEB 		ldr	r2, .L123+52
+ 1323 0bec A0219FE5 		mov	r4, r0
+ 1324 0bf0 0040A0E1 		ldrsh	r0, [r2, #0]
+ 1325 0bf4 F000D2E1 		mov	r5, r1
+ 1326 0bf8 0150A0E1 		bl	__floatsidf
+ 1327 0bfc FEFFFFEB 		mov	r2, r0
+ 1328 0c00 0020A0E1 		mov	r3, r1
+ 1329 0c04 0130A0E1 		ldmia	sp, {r0-r1}
+ 1330 0c08 03009DE8 		bl	__adddf3
+ 1331 0c0c FEFFFFEB 		mov	r2, #1069547520
+ 1332 0c10 FF25A0E3 		add	r2, r2, #2097152
+ 1333 0c14 022682E2 		mov	r3, #0
+ 1334 0c18 0030A0E3 		bl	__muldf3
+ 1335 0c1c FEFFFFEB 		mov	r2, r8
+ 1336 0c20 0820A0E1 		mov	r3, r9
+ 1337 0c24 0930A0E1 		bl	__muldf3
+ 1338 0c28 FEFFFFEB 		mov	r2, r0
+ 1339 0c2c 0020A0E1 		mov	r3, r1
+ 1340 0c30 0130A0E1 		mov	r0, r4
+ 1341 0c34 0400A0E1 		mov	r1, r5
+ 1342 0c38 0510A0E1 		bl	__adddf3
+ 1343 0c3c FEFFFFEB 		bl	__fixdfdi
+ 1344 0c40 FEFFFFEB 		.loc 1 104 0
+ 1345              		ldr	r7, .L123+56
+ 1346 0c44 4C719FE5 		.loc 1 103 0
+ 1347              		stmia	r6, {r0-r1}
+ 1348 0c48 030086E8 		.loc 1 104 0
+ 1349              		ldmia	r7, {r0-r1}
+ 1350 0c4c 030097E8 		bl	__floatdidf
+ 1351 0c50 FEFFFFEB 		ldr	r3, .L123+60
+ 1352 0c54 40319FE5 		mov	r4, r0
+ 1353 0c58 0040A0E1 		ldrsh	r0, [r3, #0]
+ 1354 0c5c F000D3E1 		mov	r5, r1
+ 1355 0c60 0150A0E1 		bl	__floatsidf
+ 1356 0c64 FEFFFFEB 		mov	r2, r0
+ 1357 0c68 0020A0E1 		mov	r3, r1
+ 1358 0c6c 0130A0E1 		mov	r0, sl
+ 1359 0c70 0A00A0E1 		mov	r1, fp
+ 1360 0c74 0B10A0E1 		bl	__adddf3
+ 1361 0c78 FEFFFFEB 		mov	r2, #1069547520
+ 1362 0c7c FF25A0E3 		add	r2, r2, #2097152
+ 1363 0c80 022682E2 		mov	r3, #0
+ 1364 0c84 0030A0E3 		bl	__muldf3
+ 1365 0c88 FEFFFFEB 		mov	r2, r0
+ 1366 0c8c 0020A0E1 		mov	r3, r1
+ 1367 0c90 0130A0E1 		mov	r0, r8
+ 1368 0c94 0800A0E1 		mov	r1, r9
+ 1369 0c98 0910A0E1 		bl	__muldf3
+ 1370 0c9c FEFFFFEB 		mov	r2, r0
+ 1371 0ca0 0020A0E1 		mov	r3, r1
+ 1372 0ca4 0130A0E1 		mov	r0, r4
+ 1373 0ca8 0400A0E1 		mov	r1, r5
+ 1374 0cac 0510A0E1 		bl	__adddf3
+ 1375 0cb0 FEFFFFEB 		bl	__fixdfdi
+ 1376 0cb4 FEFFFFEB 		stmia	r7, {r0-r1}
+ 1377 0cb8 030087E8 		b	.L121
+ 1378 0cbc 090000EA 	.L117:
+ 1379              	.LBE10:
+ 1380              		.loc 1 108 0
+ 1381              		mov	r3, #0
+ 1382 0cc0 0030A0E3 		strb	r3, [r2, #0]
+ 1383 0cc4 0030C2E5 		.loc 1 106 0
+ 1384              		ldr	r3, .L123+48
+ 1385 0cc8 C0309FE5 		mov	r2, #0
+ 1386 0ccc 0020A0E3 		mov	r1, #0
+ 1387 0cd0 0010A0E3 		stmia	r3, {r1-r2}
+ 1388 0cd4 060083E8 		.loc 1 107 0
+ 1389              		ldr	r2, .L123+56
+ 1390 0cd8 B8209FE5 		mov	r3, #0
+ 1391 0cdc 0030A0E3 		mov	r4, #0
+ 1392 0ce0 0040A0E3 		stmia	r2, {r3-r4}
+ 1393 0ce4 180082E8 	.L121:
+ 1394              		.loc 1 110 0
+ 1395              		ldr	r2, [sp, #8]
+ 1396 0ce8 08209DE5 		ldr	r4, .L123+44
+ 1397 0cec 98409FE5 		.loc 1 111 0
+ 1398              		ldmia	sp, {r0-r1}
+ 1399 0cf0 03009DE8 		.loc 1 110 0
+ 1400              		str	r2, [r4, #0]
+ 1401 0cf4 002084E5 		.loc 1 111 0
+ 1402              		bl	__fixdfsi
+ 1403 0cf8 FEFFFFEB 		ldr	r3, .L123+52
+ 1404 0cfc 90309FE5 		.loc 1 112 0
+ 1405              		mov	r1, fp
+ 1406 0d00 0B10A0E1 		.loc 1 111 0
+ 1407              		strh	r0, [r3, #0]	@ movhi
+ 1408 0d04 B000C3E1 		.loc 1 112 0
+ 1409              		mov	r0, sl
+ 1410 0d08 0A00A0E1 		bl	__fixdfsi
+ 1411 0d0c FEFFFFEB 		ldr	r4, .L123+60
+ 1412 0d10 84409FE5 		strh	r0, [r4, #0]	@ movhi
+ 1413 0d14 B000C4E1 		.loc 1 128 0
+ 1414              		add	sp, sp, #12
+ 1415 0d18 0CD08DE2 		ldmfd	sp!, {r4, r5, r6, r7, r8, r9, sl, fp, lr}
+ 1416 0d1c F04FBDE8 		bx	lr
+ 1417 0d20 1EFF2FE1 	.L120:
+ 1418              	.LBB11:
+ 1419              		.loc 1 103 0
+ 1420              		mov	r2, #0
+ 1421 0d24 0020A0E3 		mov	r1, #1
+ 1422 0d28 0110A0E3 		movs	r4, r6, lsr #1
+ 1423 0d2c A640B0E1 		mov	r3, r5, rrx
+ 1424 0d30 6530A0E1 		and	r6, r6, r2
+ 1425 0d34 026006E0 		and	r5, r5, r1
+ 1426 0d38 015005E0 		orr	r0, r5, r3
+ 1427 0d3c 030085E1 		orr	r1, r6, r4
+ 1428 0d40 041086E1 		bl	__floatdidf
+ 1429 0d44 FEFFFFEB 		mov	r2, r0
+ 1430 0d48 0020A0E1 		mov	r3, r1
+ 1431 0d4c 0130A0E1 		bl	__adddf3
+ 1432 0d50 FEFFFFEB 		mov	r8, r0
+ 1433 0d54 0080A0E1 		mov	r9, r1
+ 1434 0d58 0190A0E1 		b	.L119
+ 1435 0d5c 9FFFFFEA 	.L124:
+ 1436              		.align	2
+ 1437              	.L123:
+ 1438              		.word	1074340347
+ 1439 0d60 FB210940 		.word	1413754136
+ 1440 0d64 182D4454 		.word	-1060952231
+ 1441 0d68 5927C3C0 		.word	-1717986918
+ 1442 0d6c 9A999999 		.word	1086531417
+ 1443 0d70 5927C340 		.word	-1717986918
+ 1444 0d74 9A999999 		.word	ctrlEnabled
+ 1445 0d78 00000000 		.word	ctrlMode
+ 1446 0d7c 00000000 		.word	LL_1khz_attitude_data
+ 1447 0d80 00000000 		.word	WO_SDK
+ 1448 0d84 00000000 		.word	firstTime
+ 1449 0d88 00000000 		.word	lastTicks
+ 1450 0d8c 00000000 		.word	x_vel
+ 1451 0d90 00000000 		.word	lastAccelX
+ 1452 0d94 00000000 		.word	y_vel
+ 1453 0d98 00000000 		.word	lastAccelY
+ 1454 0d9c 00000000 	.LBE11:
+ 1455              	.LFE2:
+ 1457              		.global	timeCount
+ 1458              		.bss
+ 1459              		.align	2
+ 1462              	timeCount:
+ 1463              		.space	4
+ 1464 0000 00000000 		.global	controlState
+ 1465              		.align	1
+ 1468              	controlState:
+ 1469              		.space	2
+ 1470 0004 0000     		.global	verboseMode
+ 1473              	verboseMode:
+ 1474              		.space	1
+ 1475 0006 00       		.global	packetSize
+ 1476              		.align	1
+ 1479              	packetSize:
+ 1480              		.space	2
+ 1481 0008 0000     		.global	byteIndex
+ 1482              		.align	1
+ 1485              	byteIndex:
+ 1486              		.space	2
+ 1487 000a 0000     		.global	ctrlMode
+ 1490              	ctrlMode:
+ 1491              		.space	1
+ 1492 000c 00       		.global	ctrlEnabled
+ 1495              	ctrlEnabled:
+ 1496              		.space	1
+ 1497 000d 00       		.global	ch
+ 1500              	ch:
+ 1501              		.space	1
+ 1502 000e 00       		.global	x_vel
+ 1503              		.align	2
+ 1506              	x_vel:
+ 1507              		.space	8
+ 1508 0010 00000000 		.global	y_vel
+ 1508      00000000 
+ 1509              		.align	2
+ 1512              	y_vel:
+ 1513              		.space	8
+ 1514 0018 00000000 		.global	firstTime
+ 1514      00000000 
+ 1515              		.data
+ 1518              	firstTime:
+ 1519              		.byte	1
+ 1520 0000 01       		.comm	GPS_timeout,4,4
+ 1521              		.comm	GPS_init_status,1,1
+ 1522              		.comm	HLC_buffer,256,1
+ 1523              		.comm	WO_SDK,4,4
+ 1524              		.comm	RO_RC_Data,16,4
+ 1525              		.comm	WO_Direct_Motor_Control,4,4
+ 1526              		.comm	WO_CTRL_Input,12,4
+ 1527              		.comm	lastTicks,4,4
+ 1528              		.comm	lastAccelX,2,2
+ 1529              		.comm	lastAccelY,2,2
+ 1530              		.section	.debug_frame,"",%progbits
+ 1626              		.section	.debug_loc,"",%progbits
+DEFINED SYMBOLS
+                            *ABS*:00000000 sdk.c
+C:\Users\Nacho\AppData\Local\Temp/ccacaaaa.s:13     .text:00000000 HLC_Checksum
+C:\Users\Nacho\AppData\Local\Temp/ccacaaaa.s:24     .text:00000000 $a
+C:\Users\Nacho\AppData\Local\Temp/ccacaaaa.s:86     .text:0000003c HLC_Protocol
+C:\Users\Nacho\AppData\Local\Temp/ccacaaaa.s:109    .text:0000005c $d
+C:\Users\Nacho\AppData\Local\Temp/ccacaaaa.s:136    .text:000000bc $a
+C:\Users\Nacho\AppData\Local\Temp/ccacaaaa.s:1141   .text:000009f8 $d
+C:\Users\Nacho\AppData\Local\Temp/ccacaaaa.s:1469   .bss:00000004 controlState
+C:\Users\Nacho\AppData\Local\Temp/ccacaaaa.s:1486   .bss:0000000a byteIndex
+C:\Users\Nacho\AppData\Local\Temp/ccacaaaa.s:1496   .bss:0000000d ctrlEnabled
+                            *COM*:0000000c WO_CTRL_Input
+C:\Users\Nacho\AppData\Local\Temp/ccacaaaa.s:1491   .bss:0000000c ctrlMode
+C:\Users\Nacho\AppData\Local\Temp/ccacaaaa.s:1480   .bss:00000008 packetSize
+C:\Users\Nacho\AppData\Local\Temp/ccacaaaa.s:1474   .bss:00000006 verboseMode
+                            *COM*:00000004 WO_SDK
+                            *COM*:00000010 RO_RC_Data
+C:\Users\Nacho\AppData\Local\Temp/ccacaaaa.s:1507   .bss:00000010 x_vel
+C:\Users\Nacho\AppData\Local\Temp/ccacaaaa.s:1513   .bss:00000018 y_vel
+C:\Users\Nacho\AppData\Local\Temp/ccacaaaa.s:1181   .text:00000a5c SDK_mainloop
+C:\Users\Nacho\AppData\Local\Temp/ccacaaaa.s:1187   .text:00000a5c $a
+C:\Users\Nacho\AppData\Local\Temp/ccacaaaa.s:1439   .text:00000d60 $d
+C:\Users\Nacho\AppData\Local\Temp/ccacaaaa.s:1519   .data:00000000 firstTime
+                            *COM*:00000004 lastTicks
+                            *COM*:00000002 lastAccelX
+                            *COM*:00000002 lastAccelY
+C:\Users\Nacho\AppData\Local\Temp/ccacaaaa.s:1463   .bss:00000000 timeCount
+C:\Users\Nacho\AppData\Local\Temp/ccacaaaa.s:1501   .bss:0000000e ch
+                            *COM*:00000004 GPS_timeout
+                            *COM*:00000001 GPS_init_status
+                            *COM*:00000100 HLC_buffer
+                            *COM*:00000004 WO_Direct_Motor_Control
+
+UNDEFINED SYMBOLS
+__divdi3
+UART_SendPacket_raw
+printf
+peripheralClockFrequency
+LL_1khz_attitude_data
+__floatsidf
+__muldf3
+__divdf3
+__subdf3
+__cmpdi2
+__floatdidf
+__adddf3
+__fixdfdi
+__fixdfsi
+cos
+sin
+getSystemTicks

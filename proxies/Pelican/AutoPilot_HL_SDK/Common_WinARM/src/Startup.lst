@@ -1,0 +1,732 @@
+   1              	# 1 "Common_WinARM/src/Startup.S"
+   2              	# 1 "<built-in>"
+   1              	/***********************************************************************/
+   0              	
+   0              	
+   2              	/*  This file is part of the uVision/ARM development tools             */
+   3              	/*  Copyright KEIL ELEKTRONIK GmbH 2002-2005                           */
+   4              	/***********************************************************************/
+   5              	/*                                                                     */
+   6              	/*  STARTUP.S:  Startup file for Philips LPC2000 device series         */
+   7              	/*                                                                     */
+   8              	/***********************************************************************/
+   9              	
+  10              	/* 
+  11              	   This file has been heavily modified for the GNU-Toolchain by:
+  12              	   Martin Thomas, Kaiserslautern, Germany
+  13              	   <mthomas@rhrk.uni-kl.de>
+  14              	   http://www.siwawi.arubi.uni-kl.de/avr_projects
+  15              	   
+  16              	   If it does not work for you: don't blame Keil or Philips. 
+  17              	*/
+  18              	
+  19              	/* 
+  20              	//*** <<< Use Configuration Wizard in Context Menu >>> *** 
+  21              	*/
+  22              	
+  23              	
+  24              	/*
+  25              	 *  The STARTUP.S code is executed after CPU Reset. This file may be 
+  26              	 *  translated with the following SET symbols. In uVision these SET 
+  27              	 *  symbols are entered under Options - ASM - Set.
+  28              	 *
+  29              	 *  REMAP: when set the startup code initializes the register MEMMAP 
+  30              	 *  which overwrites the settings of the CPU configuration pins. The 
+  31              	 *  startup and interrupt vectors are remapped from:
+  32              	 *     0x00000000  default setting (not remapped)
+  33              	 *     0x80000000  when EXTMEM_MODE is used
+  34              	 *     0x40000000  when RAM_MODE is used
+  35              	 *
+  36              	 *  EXTMEM_MODE: when set the device is configured for code execution
+  37              	 *  from external memory starting at address 0x80000000. The startup
+  38              	 *  vectors are located to 0x80000000.
+  39              	 *
+  40              	 *  RAM_MODE: when set the device is configured for code execution
+  41              	 *  from on-chip RAM starting at address 0x40000000. The startup
+  42              	 *  vectors are located to 0x40000000.
+  43              	 */
+  44              	
+  45              	/* Map Preprocessor definitions to assembler definitions/symbols */
+  46              	
+  47              	.set EXTMEM_MODE, 0
+  48              	
+  49              	#ifdef ROM_RUN
+  50              	.set RAM_MODE, 0
+  51              	#ifdef VECTORS_IN_RAM
+  52              	.set REMAP, 1
+  53              	.set VECTREMAPPED, 1
+  54              	#else
+  55              	.set REMAP, 0
+  56              	.set VECTREMAPPED, 0
+  57              	#endif
+  58              	#endif
+  59              	
+  60              	#ifdef RAM_RUN
+  61              	.set RAM_MODE, 1
+  62              	.set REMAP, 1
+  63              	.set VECTREMAPPED, 0
+  64              	#endif
+  65              	
+  66              	
+  67              	
+  68              	.if (RAM_MODE)
+  69              	.print "RAM_MODE enabled"
+  70              	.else
+  71              	.print "ROM_MODE enabled"
+  72              	.endif
+  73              	
+  74              	.if (REMAP)
+  75              	.print "remapping enabled"
+  76              	.endif
+  77              	
+  78              	.if (VECTREMAPPED)
+  79              	.print "Vectors at start of RAM"
+  80              	.else
+  81              	.print "Vectors at start of Code"
+  82              	.endif
+  83              	
+  84              	
+  85              	// Standard definitions of Mode bits and Interrupt (I & F) flags in PSRs
+  86              	
+  87              	        .set Mode_USR, 0x10
+  88              	        .set Mode_FIQ, 0x11
+  89              	        .set Mode_IRQ, 0x12
+  90              	        .set Mode_SVC, 0x13
+  91              	        .set Mode_ABT, 0x17
+  92              	        .set Mode_UND, 0x1B
+  93              	        .set Mode_SYS, 0x1F
+  94              	
+  95              	        .set I_Bit, 0x80    /* when I bit is set, IRQ is disabled */
+  96              	        .set F_Bit, 0x40    /* when F bit is set, FIQ is disabled */
+  97              	
+  98              	
+  99              	/*
+ 100              	// <h> Stack Configuration (Stack Sizes in Bytes)
+ 101              	//   <o0> Undefined Mode      <0x0-0xFFFFFFFF:4>
+ 102              	//   <o1> Supervisor Mode     <0x0-0xFFFFFFFF:4>
+ 103              	//   <o2> Abort Mode          <0x0-0xFFFFFFFF:4>
+ 104              	//   <o3> Fast Interrupt Mode <0x0-0xFFFFFFFF:4>
+ 105              	//   <o4> Interrupt Mode      <0x0-0xFFFFFFFF:4>
+ 106              	//   <o5> User/System Mode    <0x0-0xFFFFFFFF:4>
+ 107              	// </h>
+ 108              	*/
+ 109              	        .set UND_Stack_Size, 0x00000080
+ 110              	        .set SVC_Stack_Size, 0x00000800
+ 111              	        .set ABT_Stack_Size, 0x00000080
+ 112              	        .set FIQ_Stack_Size, 0x00000080
+ 113              	        .set IRQ_Stack_Size, 0x00000800
+ 114              	        .set USR_Stack_Size, 0x00000800
+ 115              	
+ 116              	#if 0
+ 117              	AREA   STACK, DATA, READWRITE, ALIGN=2 
+ 118              	        DS   (USR_Stack_Size+3)&~3  ; Stack for User/System Mode 
+ 119              	        DS   (SVC_Stack_Size+3)&~3  ; Stack for Supervisor Mode
+ 120              	        DS   (IRQ_Stack_Size+3)&~3  ; Stack for Interrupt Mode
+ 121              	        DS   (FIQ_Stack_Size+3)&~3  ; Stack for Fast Interrupt Mode 
+ 122              	        DS   (ABT_Stack_Size+3)&~3  ; Stack for Abort Mode
+ 123              	        DS   (UND_Stack_Size+3)&~3  ; Stack for Undefined Mode
+ 124              	#endif
+ 125              	
+ 126              	.arm
+ 127              	.section .stack, "w"
+ 128              	.align 4
+ 129 0000 00000000 	        .space (USR_Stack_Size+3)&~3  // Stack for User/System Mode 
+ 129      00000000 
+ 129      00000000 
+ 129      00000000 
+ 129      00000000 
+ 130 0800 00000000 	        .space (SVC_Stack_Size+3)&~3  // Stack for Supervisor Mode
+ 130      00000000 
+ 130      00000000 
+ 130      00000000 
+ 130      00000000 
+ 131 1000 00000000 	        .space (IRQ_Stack_Size+3)&~3  // Stack for Interrupt Mode
+ 131      00000000 
+ 131      00000000 
+ 131      00000000 
+ 131      00000000 
+ 132 1800 00000000 	        .space (FIQ_Stack_Size+3)&~3  // Stack for Fast Interrupt Mode 
+ 132      00000000 
+ 132      00000000 
+ 132      00000000 
+ 132      00000000 
+ 133 1880 00000000 	        .space (ABT_Stack_Size+3)&~3  // Stack for Abort Mode
+ 133      00000000 
+ 133      00000000 
+ 133      00000000 
+ 133      00000000 
+ 134 1900 00000000 	        .space (UND_Stack_Size+3)&~3  // Stack for Undefined Mode
+ 134      00000000 
+ 134      00000000 
+ 134      00000000 
+ 134      00000000 
+ 135              	Top_Stack:
+ 136              	
+ 137              	
+ 138              	// VPBDIV definitions
+ 139              	        .set VPBDIV, 0xE01FC100  /* VPBDIV Address */
+ 140              	
+ 141              	/*
+ 142              	// <e> VPBDIV Setup
+ 143              	// <i> Peripheral Bus Clock Rate
+ 144              	//   <o1.0..1>   VPBDIV: VPB Clock
+ 145              	//               <0=> VPB Clock = CPU Clock / 4
+ 146              	//               <1=> VPB Clock = CPU Clock
+ 147              	//               <2=> VPB Clock = CPU Clock / 2
+ 148              	//   <o1.4..5>   XCLKDIV: XCLK Pin
+ 149              	//               <0=> XCLK Pin = CPU Clock / 4
+ 150              	//               <1=> XCLK Pin = CPU Clock
+ 151              	//               <2=> XCLK Pin = CPU Clock / 2
+ 152              	// </e>
+ 153              	*/
+ 154              	        .set VPBDIV_SETUP, 1
+ 155              	        .set VPBDIV_Val, 0x00000000
+ 156              	
+ 157              	
+ 158              	// Phase Locked Loop (PLL) definitions
+ 159              	        .set PLL_BASE,      0xE01FC080  /* PLL Base Address */
+ 160              	        .set PLLCON_OFS,    0x00        /* PLL Control Offset*/
+ 161              	        .set PLLCFG_OFS,    0x04        /* PLL Configuration Offset */
+ 162              	        .set PLLSTAT_OFS,   0x08        /* PLL Status Offset */
+ 163              	        .set PLLFEED_OFS,   0x0C        /* PLL Feed Offset */
+ 164              	        .set PLLCON_PLLE,   (1<<0)      /* PLL Enable */
+ 165              	        .set PLLCON_PLLC,   (1<<1)      /* PLL Connect */
+ 166              	        .set PLLCFG_MSEL,   (0x1F<<0)   /* PLL Multiplier */
+ 167              	        .set PLLCFG_PSEL,   (0x03<<5)   /* PLL Divider */
+ 168              	        .set PLLSTAT_PLOCK, (1<<10)     /* PLL Lock Status */
+ 169              	
+ 170              	/*
+ 171              	// <e> PLL Setup
+ 172              	// <i> Phase Locked Loop
+ 173              	// <i> CCLK - Processor Clock
+ 174              	// <i> Fcco - PLL Oscillator
+ 175              	//   <o1.0..4>   MSEL: PLL Multiplier Selection
+ 176              	//               <1-32><#-1>
+ 177              	//               <i> PLL Multiplier "M" Value
+ 178              	//               <i> CCLK = M * Fosc
+ 179              	//   <o1.5..6>   PSEL: PLL Divider Selection
+ 180              	//               <0=> 1   <1=> 2   <2=> 4   <3=> 8
+ 181              	//               <i> PLL Divider "P" Value
+ 182              	//               <i> Fcco = CCLK * 2 * P
+ 183              	//               <i> 156MHz <= Fcco <= 320MHz
+ 184              	// </e>
+ 185              	*/
+ 186              	        .set PLL_SETUP,  1
+ 187              	        .set PLLCFG_Val, 0x00000024
+ 188              	
+ 189              	
+ 190              	// Memory Accelerator Module (MAM) definitions
+ 191              	        .set MAM_BASE,   0xE01FC000  /* MAM Base Address */
+ 192              	        .set MAMCR_OFS,  0x00        /* MAM Control Offset*/
+ 193              	        .set MAMTIM_OFS, 0x04        /* MAM Timing Offset */
+ 194              	
+ 195              	/*
+ 196              	// <e> MAM Setup
+ 197              	// <i> Memory Accelerator Module
+ 198              	//   <o1.0..1>   MAM Control
+ 199              	//               <0=> Disabled
+ 200              	//               <1=> Partially Enabled
+ 201              	//               <2=> Fully Enabled
+ 202              	//               <i> Mode
+ 203              	//   <o2.0..2>   MAM Timing
+ 204              	//               <0=> Reserved  <1=> 1   <2=> 2   <3=> 3
+ 205              	//               <4=> 4         <5=> 5   <6=> 6   <7=> 7
+ 206              	//               <i> Fetch Cycles
+ 207              	// </e>
+ 208              	*/
+ 209              	        .set MAM_SETUP,    1
+ 210              	        .set MAMCR_Val,    0x00000002
+ 211              	        .set MAMTIM_Val,   0x00000004
+ 212              	
+ 213              	
+ 214              	// Starupt Code must be linked first at Address at which it expects to run.
+ 215              	
+ 216              	.if     (EXTMEM_MODE)
+ 217              	        .set CODE_BASE,  0x80000000
+ 218              	.elseif (RAM_MODE)
+ 219              	        .set CODE_BASE,  0x40000000
+ 220              	.else
+ 221              	        .set CODE_BASE,  0x00000000
+ 222              	.endif
+ 223              	
+ 224              	#if 0
+ 225              	AREA   STARTUPCODE, CODE, AT CODE_BASE   // READONLY, ALIGN=4
+ 226              	       PUBLIC  __startup
+ 227              	
+ 228              	       EXTERN  CODE32 (?C?INIT)
+ 229              	
+ 230              	__startup       PROC    CODE32
+ 231              	
+ 232              	// Pre-defined interrupt handlers that may be directly 
+ 233              	// overwritten by C interrupt functions
+ 234              	EXTERN CODE32 (Undef_Handler?A)
+ 235              	EXTERN CODE32 (SWI_Handler?A)
+ 236              	EXTERN CODE32 (PAbt_Handler?A)
+ 237              	EXTERN CODE32 (DAbt_Handler?A)
+ 238              	EXTERN CODE32 (IRQ_Handler?A)
+ 239              	EXTERN CODE32 (FIQ_Handler?A)
+ 240              	#endif
+ 241              	
+ 242              	.text
+ 243              	.arm
+ 244              	
+ 245              	.if (VECTREMAPPED)
+ 246              	.print "Vectors in section .vectmapped -> .data"
+ 247              	.section .vectmapped, "ax"
+ 248              	.else
+ 249              	.print "Vectors in section .vectorg -> .text"
+ 250              	.section .vectorg, "ax"
+ 251              	.endif
+ 252              	
+ 253              	// Pre-defined interrupt handlers that may be directly 
+ 254              	// overwritten by C interrupt functions
+ 255              	.extern Undef_Handler
+ 256              	.extern SWI_Handler
+ 257              	.extern PAbt_Handler
+ 258              	.extern DAbt_Handler
+ 259              	.extern IRQ_Handler
+ 260              	.extern FIQ_Handler
+ 261              	
+ 262              	
+ 263              	// Exception Vectors
+ 264              	// Mapped to Address 0.
+ 265              	// Absolute addressing mode must be used.
+ 266              	
+ 267 0000 18F09FE5 	__Vectors:        LDR     PC,Reset_Addr         
+ 268 0004 18F09FE5 	                LDR     PC,Undef_Addr
+ 269 0008 18F09FE5 	                LDR     PC,SWI_Addr
+ 270 000c 18F09FE5 	                LDR     PC,PAbt_Addr
+ 271 0010 18F09FE5 	                LDR     PC,DAbt_Addr
+ 272 0014 0000A0E1 	                NOP                            /* Reserved Vector */
+ 273              	//                LDR     PC,IRQ_Addr
+ 274              	//                LDR     PC,[PC, #-0x0FF0]      /* Vector from VicVectAddr */
+ 275 0018 18F09FE5 	                LDR     PC,IRQ_Wrapper_Addr
+ 276 001c 18F09FE5 	                LDR     PC,FIQ_Addr
+ 277              	
+ 278 0020 00000000 	Reset_Addr:       .word     Reset_Handler
+ 279 0024 40000000 	Undef_Addr:       .word     Undef_Handler
+ 280              	// SWI_Addr:         .word     SWI_Handler
+ 281              	// SWI_Wrapper_Addr: .word     SWI_Wrapper
+ 282 0028 00000000 	SWI_Addr:         .word     SoftwareInterrupt      /* in swi_handler.S */
+ 283 002c 44000000 	PAbt_Addr:        .word     PAbt_Handler
+ 284 0030 48000000 	DAbt_Addr:        .word     DAbt_Handler
+ 285 0034 00000000 	                  .word     0                      /* Reserved Address */
+ 286              	// IRQ_Addr:         .word     __IRQ_Handler
+ 287 0038 00000000 	IRQ_Wrapper_Addr: .word    __IRQ_Wrapper
+ 288 003c 4C000000 	FIQ_Addr:         .word     FIQ_Handler
+ 289              	
+ 290 0040 FEFFFFEA 	Undef_Handler:  B       Undef_Handler
+ 291              	/* SWI_Handler:    B       SWI_Handler */
+ 292 0044 FEFFFFEA 	PAbt_Handler:   B       PAbt_Handler
+ 293 0048 FEFFFFEA 	DAbt_Handler:   B       DAbt_Handler
+ 294              	/* IRQ_Handler:    B       IRQ_Handler */
+ 295 004c FEFFFFEA 	FIQ_Handler:    B       FIQ_Handler
+ 296              	
+ 298              	
+ 299              	
+ 300              	
+ 301              	.arm
+ 302              	.section .init, "ax"
+ 303              	
+ 304              	.if (VECTREMAPPED)
+ 305              	/* mthomas: Dummy used during startup - mind the nops since the 
+ 306              	   flash-utility will overwrite the "reserved vector"-address
+ 307              	   with the checksum */
+ 308              					B Reset_Handler
+ 309              					NOP
+ 310              					NOP
+ 311              					NOP
+ 312              					NOP
+ 313              					NOP  /* Reserved Address */
+ 314              					NOP
+ 315              					NOP
+ 316              	.endif
+ 317              	
+ 318              	.arm
+ 319              	.section .init, "ax"
+ 320              	.global __startup
+ 321              	.func __startup
+ 322              	__startup:
+ 323              	
+ 324              	Reset_Handler:  
+ 325              	
+ 326              	.if (VPBDIV_SETUP)
+ 327 0000 28019FE5 	                LDR     R0, =VPBDIV
+ 328 0004 0010A0E3 	                LDR     R1, =VPBDIV_Val
+ 329 0008 001080E5 	                STR     R1, [R0]
+ 330              	.endif
+ 331              	
+ 332              	
+ 333              	.if (PLL_SETUP)
+ 334 000c 20019FE5 	                LDR     R0, =PLL_BASE
+ 335 0010 AA10A0E3 	                MOV     R1, #0xAA
+ 336 0014 5520A0E3 	                MOV     R2, #0x55
+ 337              	
+ 338              	// Configure and Enable PLL
+ 339 0018 2430A0E3 	                MOV     R3, #PLLCFG_Val
+ 340 001c 043080E5 	                STR     R3, [R0, #PLLCFG_OFS] 
+ 341 0020 0130A0E3 	                MOV     R3, #PLLCON_PLLE
+ 342 0024 003080E5 	                STR     R3, [R0, #PLLCON_OFS]
+ 343 0028 0C1080E5 	                STR     R1, [R0, #PLLFEED_OFS]
+ 344 002c 0C2080E5 	                STR     R2, [R0, #PLLFEED_OFS]
+ 345              	
+ 346              	// Wait until PLL Locked
+ 347 0030 083090E5 	PLL_Loop:       LDR     R3, [R0, #PLLSTAT_OFS]
+ 348 0034 013B13E2 	                ANDS    R3, R3, #PLLSTAT_PLOCK
+ 349 0038 FCFFFF0A 	                BEQ     PLL_Loop
+ 350              	
+ 351              	// Switch to PLL Clock
+ 352 003c 0330A0E3 	                MOV     R3, #(PLLCON_PLLE | PLLCON_PLLC)
+ 353 0040 003080E5 	                STR     R3, [R0, #PLLCON_OFS]
+ 354 0044 0C1080E5 	                STR     R1, [R0, #PLLFEED_OFS]
+ 355 0048 0C2080E5 	                STR     R2, [R0, #PLLFEED_OFS]
+ 356              	.endif
+ 357              	
+ 358              	
+ 359              	.if (MAM_SETUP)
+ 360 004c E4009FE5 	                LDR     R0, =MAM_BASE
+ 361 0050 0410A0E3 	                MOV     R1, #MAMTIM_Val
+ 362 0054 041080E5 	                STR     R1, [R0, #MAMTIM_OFS] 
+ 363 0058 0210A0E3 	                MOV     R1, #MAMCR_Val
+ 364 005c 001080E5 	                STR     R1, [R0, #MAMCR_OFS] 
+ 365              	.endif
+ 366              	
+ 367              	
+ 368              	// Memory Mapping
+ 369              	                .set MEMMAP, 0xE01FC040  /* Memory Mapping Control */
+ 370              	
+ 371              	.if (REMAP)
+ 372              	                LDR     R0, =MEMMAP
+ 373              	.if     (EXTMEM_MODE)                
+ 374              	                MOV     R1, #3
+ 375              	.elseif (RAM_MODE) || (VECTREMAPPED)
+ 376              	.print "MEMMAP to 2 on init"
+ 377              	                MOV     R1, #2
+ 378              	.else
+ 379              	                MOV     R1, #1
+ 380              	.endif
+ 381              	                STR     R1, [R0]
+ 382              	.endif
+ 383              	
+ 384              	// Setup Stack for each mode
+ 385 0060 D4009FE5 	                LDR     R0, =Top_Stack
+ 386              	
+ 387              	// Enter Undefined Instruction Mode and set its Stack Pointer
+ 388 0064 DBF021E3 	                MSR     CPSR_c, #Mode_UND|I_Bit|F_Bit
+ 389 0068 00D0A0E1 	                MOV     SP, R0
+ 390 006c 800040E2 	                SUB     R0, R0, #UND_Stack_Size
+ 391              	
+ 392              	// Enter Abort Mode and set its Stack Pointer
+ 393 0070 D7F021E3 	                MSR     CPSR_c, #Mode_ABT|I_Bit|F_Bit
+ 394 0074 00D0A0E1 	                MOV     SP, R0
+ 395 0078 800040E2 	                SUB     R0, R0, #ABT_Stack_Size
+ 396              	
+ 397              	// Enter FIQ Mode and set its Stack Pointer
+ 398 007c D1F021E3 	                MSR     CPSR_c, #Mode_FIQ|I_Bit|F_Bit
+ 399 0080 00D0A0E1 	                MOV     SP, R0
+ 400 0084 800040E2 	                SUB     R0, R0, #FIQ_Stack_Size
+ 401              	
+ 402              	// Enter IRQ Mode and set its Stack Pointer
+ 403 0088 D2F021E3 	                MSR     CPSR_c, #Mode_IRQ|I_Bit|F_Bit
+ 404 008c 00D0A0E1 	                MOV     SP, R0
+ 405 0090 020B40E2 	                SUB     R0, R0, #IRQ_Stack_Size
+ 406              	
+ 407              	// Enter Supervisor Mode and set its Stack Pointer
+ 408 0094 D3F021E3 	                MSR     CPSR_c, #Mode_SVC|I_Bit|F_Bit
+ 409 0098 00D0A0E1 	                MOV     SP, R0
+ 410 009c 020B40E2 	                SUB     R0, R0, #SVC_Stack_Size
+ 411              	
+ 412              	// Enter User Mode and set its Stack Pointer
+ 413 00a0 10F021E3 	                MSR     CPSR_c, #Mode_USR /* Interrupts enabled */
+ 414              	//				MSR     CPSR_c, #Mode_USR|I_Bit|F_Bit /* Interrupts disabled */
+ 415 00a4 00D0A0E1 	                MOV     SP, R0
+ 416              	
+ 417              	
+ 418              	.if (RAM_MODE==0)
+ 419              	/* Relocate .data section (Copy from ROM to RAM) */
+ 420 00a8 90109FE5 	                LDR     R1, =_etext 
+ 421 00ac 90209FE5 	                LDR     R2, =_data 
+ 422 00b0 90309FE5 	                LDR     R3, =_edata 
+ 423 00b4 030052E1 	                CMP     R2, R3
+ 424 00b8 0300000A 	                BEQ     DataIsEmpty
+ 425 00bc 030052E1 	LoopRel:        CMP     R2, R3 
+ 426 00c0 04009134 	                LDRLO   R0, [R1], #4 
+ 427 00c4 04008234 	                STRLO   R0, [R2], #4 
+ 428 00c8 FBFFFF3A 	                BLO     LoopRel 
+ 429              	DataIsEmpty:
+ 430              	.endif
+ 431              	 
+ 432              	/* Clear .bss section (Zero init) */
+ 433 00cc 0000A0E3 	                MOV     R0, #0 
+ 434 00d0 74109FE5 	                LDR     R1, =__bss_start__ 
+ 435 00d4 74209FE5 	                LDR     R2, =__bss_end__ 
+ 436 00d8 020051E1 	                CMP     R1,R2
+ 437 00dc 0200000A 	                BEQ     BSSIsEmpty
+ 438 00e0 020051E1 	LoopZI:         CMP     R1, R2 
+ 439 00e4 04008134 	                STRLO   R0, [R1], #4 
+ 440 00e8 FCFFFF3A 	                BLO     LoopZI 
+ 441              	BSSIsEmpty:
+ 442              	
+ 443              	
+ 444              	// call C++ constructors of global objects
+ 445 00ec 60009FE5 			LDR 	r0, =__ctors_start__
+ 446 00f0 60109FE5 			LDR 	r1, =__ctors_end__
+ 447              	ctor_loop:
+ 448 00f4 010050E1 			CMP 	r0, r1
+ 449 00f8 0500000A 			BEQ 	ctor_end
+ 450 00fc 042090E4 			LDR 	r2, [r0], #4
+ 451 0100 03002DE9 			STMFD 	sp!, {r0-r1}
+ 452 0104 0FE0A0E1 			MOV 	lr, pc
+ 453 0108 02F0A0E1 			MOV 	pc, r2
+ 454 010c 0300BDE8 			LDMFD 	sp!, {r0-r1}
+ 455 0110 F7FFFFEA 			B 		ctor_loop
+ 456              	ctor_end:
+ 457              	
+ 458              	// Enter the C code
+ 459              	                //LDR     R0,=INIT
+ 460 0114 40009FE5 	                LDR     R0,=main
+ 461 0118 010010E3 	                TST     R0,#1             // Bit-0 set: main is Thumb
+ 462 011c 3CE09F05 	                LDREQ   LR,=__exit_ARM    // ARM Mode
+ 463 0120 3CE09F15 	                LDRNE   LR,=__exit_THUMB  // Thumb Mode
+ 464 0124 10FF2FE1 	                BX      R0
+ 465              	
+ 467              	.endfunc
+ 468              	
+ 469              	.arm
+ 470              	.global __exit_ARM
+ 471              	.func __exit_ARM
+ 472              	__exit_ARM:
+ 473 0128 FEFFFFEA 	                B       __exit_ARM
+ 475              	.endfunc
+ 476              	
+ 477              	.thumb
+ 478              	.global __exit_THUMB
+ 479              	.func __exit_THUMB
+ 480              	__exit_THUMB:
+ 481 012c FEE7     	                B       __exit_THUMB
+ 483              	.endfunc
+ 484              	
+ 485              	
+ 486              	/* mthomas: the following code is inspired by various examples and
+ 487              	   documents from ARM, Atmel, Anglia Designs and others */
+ 488              	
+ 489              	
+ 490 012e 0000     	.text
+ 491              	.arm
+ 492              	
+ 493              	.if (VECTREMAPPED)
+ 494              	.print "Handlers in section .vectmapped -> .data"
+ 495              	.section .vectmapped, "ax"
+ 496              	.else
+ 497              	.print "Handlers in section .vectorg -> .code/.text"
+ 498              	.section .vectorg, "ax"
+ 499              	.endif
+ 500              	
+ 501              	.set VIC_base_addr, 0xFFFFF000
+ 502              	.set VIC_vect_offs, 0x30
+ 503              	
+ 504              	        .arm
+ 505              	        .global __IRQ_Wrapper
+ 506              	        .func   __IRQ_Wrapper
+ 507              	__IRQ_Wrapper:
+ 508              	/*- Manage Exception Entry  */
+ 509              	/*- Adjust and save LR_irq in IRQ stack  */
+ 510 0050 04E04EE2 	            sub         lr, lr, #4
+ 511 0054 00402DE9 	            stmfd       sp!, {lr}
+ 512              	
+ 513              	/*- Save SPSR need to be saved for nested interrupt */
+ 514 0058 00E04FE1 	            mrs         r14, SPSR
+ 515 005c 00402DE9 	            stmfd       sp!, {r14}
+ 516              	
+ 517              	/*- Save and r0 in IRQ stack  */
+ 518 0060 01002DE9 	            stmfd       sp!, {r0}
+ 519              	
+ 520              	/*- Write in the IVR to support Protect Mode  */
+ 521              	/*- No effect in Normal Mode  */
+ 522              	/*- De-assert the NIRQ and clear the source in Protect Mode */
+ 523              	/* R14 = LR */
+ 524 0064 28E09FE5 	            ldr         r14, =VIC_base_addr
+ 525 0068 30009EE5 	            ldr         r0 , [r14, #VIC_vect_offs]
+ 526              	            /*str         r14, [r14, #VIC_vect_offs]*/
+ 527              	
+ 528              	/*- Enable Interrupt and Switch in Supervisor Mode */
+ 529 006c 93F021E3 	            msr         CPSR_c, #I_Bit | Mode_SVC
+ 530              	
+ 531              	/*- Save scratch/used registers and LR in User Stack */
+ 532              	            /*stmfd       sp!, { r1-r3, r12, r14}*/
+ 533 0070 FE5F2DE9 	            stmfd       sp!, { r1-r12, r14 }
+ 534              	
+ 535              	/*- Branch to the routine pointed by the VIC-Vector-Address  */
+ 536 0074 0FE0A0E1 	            mov         r14, pc
+ 537 0078 10FF2FE1 	            bx          r0
+ 538              	/*- Restore scratch/used registers and LR from User Stack*/
+ 539              	            /* ldmia       sp!, { r1-r3, r12, r14} */
+ 540 007c FE5FBDE8 	            ldmia       sp!, { r1-r12, r14 }
+ 541              	
+ 542              	/*- Disable Interrupt and switch back in IRQ mode */
+ 543 0080 92F021E3 	            msr         CPSR_c, #I_Bit | Mode_IRQ
+ 544              	
+ 545              	#if 0
+ 546              	/* VICVectAddr=0 is already done in the ISRs of the Philips-Examples 
+ 547              	   so commented out here */
+ 548              	/*- Mark the End of Interrupt on the VIC */
+ 549              	            ldr         r14, =VIC_base_addr
+ 550              	            str         r14, [r14, #VIC_vect_offs]
+ 551              	#endif
+ 552              	
+ 553              	/*- Restore SPSR_irq and r0 from IRQ stack */
+ 554 0084 0100BDE8 	            ldmia       sp!, {r0}
+ 555              	
+ 556              	/*- Restore SPSR_irq and r0 from IRQ stack */
+ 557 0088 0040BDE8 	            ldmia       sp!, {r14}
+ 558 008c 0EF06FE1 	            msr         SPSR_cxsf, r14
+ 559              	
+ 560              	/*- Restore adjusted  LR_irq from IRQ stack directly in the PC */
+ 561 0090 0080FDE8 	            ldmia       sp!, {pc}^
+ 562              	
+ 564              	.endfunc
+ 565              	
+ 566              	
+ 567              	#if 0
+ 568              	/* mthomas:
+ 569              	   Wrapper to call a C swi-Function declared with 
+ 570              	   void SWI_Handler(int swi_num, int *regs)
+ 571              	   Inspired by Anglia Designs example 
+ 572              	   -- not used here - see swi_handler.S
+ 573              	*/
+ 574              	        .arm
+ 575              	        .global __SWI_Wrapper
+ 576              	        .func   __SWI_Wrapper
+ 577              	__SWI_Wrapper:                       /* r0 holds swi number */
+ 578              	        STMFD   sp!,{r0-r12,lr}    /* Save The workspace plus the current return */
+ 579              	                                   /* address lr_ mode into the stack */
+ 580              	        MRS     r1, spsr           /* Save the spsr_mode into r1 */
+ 581              	        STMFD   sp!, {r1}          /* Save spsr */
+ 582              	        MOV     r1, sp             /* load regs */
+ 583              	        LDR     r0,=SWI_Handler    
+ 584              	        MOV     lr, pc
+ 585              	        BX      r0                 /* call the C-funcktion */
+ 586              	        LDMFD   sp!, {r1}          /* Restore the saved spsr_mode into r1 */
+ 587              	        MSR     spsr_cxsf, r1      /* Restore spsr_mode */
+ 588              	        LDMFD   sp!, {r0-r12,pc}   /* Return to the instruction following */
+ 589              	                                   /* the exception interrupt */
+ 591              	        .endfunc
+ 592              	#endif
+ 593              	
+ 594              	#if 0
+ 595              	/* mthomas: not used here - reminder for future tests */
+ 596              			.arm
+ 597              			.global __IRQ_Wrapper
+ 598              			.func __IRQ_Wrapper
+ 599              	__IRQ_Wrapper:
+ 600              			SUB		lr, lr, #4				/* Update the link register */
+ 601              			STMFD	sp!,{r0-r12,lr}	        /* Save The workspace plus the current return */
+ 602              											/* address lr_ mode into the stack */
+ 603              			MRS		r1, spsr				/* Save the spsr_mode into r1 */
+ 604              			STMFD	sp!, {r1}				/* Save spsr */
+ 605              			LDR		lr, =ReturnAddress		/* Read the return address. */
+ 606              			LDR		r0, =VIC_base_addr      /* Load VIC Base-Address */
+ 607              			LDR		r1, [r0, #VIC_vect_offs] /* Load ISR-Address from VICVectAddr */
+ 608              			bx      r1                      /* Branch to the IRQ handler. */
+ 609              	ReturnAddress:
+ 610              			LDR     r2, =VIC_base_addr      /* clear Interrupt */
+ 611              			MOV     r3, #0
+ 612              			STR     R3, [R2, #VIC_vect_offs] /* by writing to VICVectAddr */
+ 613              			LDMFD	sp!, {r1}				/* Restore the saved spsr_mode into r1 */
+ 614              			MSR		spsr_cxsf, r1			/* Restore spsr_mode */
+ 615              			LDMFD	sp!, {r0-r12,pc}^	    /* Return to the instruction following */
+ 616              											/* the exception interrupt */
+ 618              	.endfunc
+ 619              	#endif
+ 620              	
+ 621 0094 00F0FFFF 	.end
+DEFINED SYMBOLS
+                            *ABS*:00000000 Common_WinARM/src/Startup.S
+Common_WinARM/src/Startup.S:47     *ABS*:00000000 EXTMEM_MODE
+Common_WinARM/src/Startup.S:50     *ABS*:00000000 RAM_MODE
+Common_WinARM/src/Startup.S:55     *ABS*:00000000 REMAP
+Common_WinARM/src/Startup.S:56     *ABS*:00000000 VECTREMAPPED
+Common_WinARM/src/Startup.S:87     *ABS*:00000010 Mode_USR
+Common_WinARM/src/Startup.S:88     *ABS*:00000011 Mode_FIQ
+Common_WinARM/src/Startup.S:89     *ABS*:00000012 Mode_IRQ
+Common_WinARM/src/Startup.S:90     *ABS*:00000013 Mode_SVC
+Common_WinARM/src/Startup.S:91     *ABS*:00000017 Mode_ABT
+Common_WinARM/src/Startup.S:92     *ABS*:0000001b Mode_UND
+Common_WinARM/src/Startup.S:93     *ABS*:0000001f Mode_SYS
+Common_WinARM/src/Startup.S:95     *ABS*:00000080 I_Bit
+Common_WinARM/src/Startup.S:96     *ABS*:00000040 F_Bit
+Common_WinARM/src/Startup.S:109    *ABS*:00000080 UND_Stack_Size
+Common_WinARM/src/Startup.S:110    *ABS*:00000800 SVC_Stack_Size
+Common_WinARM/src/Startup.S:111    *ABS*:00000080 ABT_Stack_Size
+Common_WinARM/src/Startup.S:112    *ABS*:00000080 FIQ_Stack_Size
+Common_WinARM/src/Startup.S:113    *ABS*:00000800 IRQ_Stack_Size
+Common_WinARM/src/Startup.S:114    *ABS*:00000800 USR_Stack_Size
+Common_WinARM/src/Startup.S:126    .text:00000000 $a
+Common_WinARM/src/Startup.S:135    .stack:00001980 Top_Stack
+Common_WinARM/src/Startup.S:139    *ABS*:e01fc100 VPBDIV
+Common_WinARM/src/Startup.S:154    *ABS*:00000001 VPBDIV_SETUP
+Common_WinARM/src/Startup.S:155    *ABS*:00000000 VPBDIV_Val
+Common_WinARM/src/Startup.S:159    *ABS*:e01fc080 PLL_BASE
+Common_WinARM/src/Startup.S:160    *ABS*:00000000 PLLCON_OFS
+Common_WinARM/src/Startup.S:161    *ABS*:00000004 PLLCFG_OFS
+Common_WinARM/src/Startup.S:162    *ABS*:00000008 PLLSTAT_OFS
+Common_WinARM/src/Startup.S:163    *ABS*:0000000c PLLFEED_OFS
+Common_WinARM/src/Startup.S:164    *ABS*:00000001 PLLCON_PLLE
+Common_WinARM/src/Startup.S:165    *ABS*:00000002 PLLCON_PLLC
+Common_WinARM/src/Startup.S:166    *ABS*:0000001f PLLCFG_MSEL
+Common_WinARM/src/Startup.S:167    *ABS*:00000060 PLLCFG_PSEL
+Common_WinARM/src/Startup.S:168    *ABS*:00000400 PLLSTAT_PLOCK
+Common_WinARM/src/Startup.S:186    *ABS*:00000001 PLL_SETUP
+Common_WinARM/src/Startup.S:187    *ABS*:00000024 PLLCFG_Val
+Common_WinARM/src/Startup.S:191    *ABS*:e01fc000 MAM_BASE
+Common_WinARM/src/Startup.S:192    *ABS*:00000000 MAMCR_OFS
+Common_WinARM/src/Startup.S:193    *ABS*:00000004 MAMTIM_OFS
+Common_WinARM/src/Startup.S:209    *ABS*:00000001 MAM_SETUP
+Common_WinARM/src/Startup.S:210    *ABS*:00000002 MAMCR_Val
+Common_WinARM/src/Startup.S:211    *ABS*:00000004 MAMTIM_Val
+Common_WinARM/src/Startup.S:221    *ABS*:00000000 CODE_BASE
+Common_WinARM/src/Startup.S:267    .vectorg:00000000 __Vectors
+Common_WinARM/src/Startup.S:267    .vectorg:00000000 $a
+Common_WinARM/src/Startup.S:278    .vectorg:00000020 Reset_Addr
+Common_WinARM/src/Startup.S:279    .vectorg:00000024 Undef_Addr
+Common_WinARM/src/Startup.S:282    .vectorg:00000028 SWI_Addr
+Common_WinARM/src/Startup.S:283    .vectorg:0000002c PAbt_Addr
+Common_WinARM/src/Startup.S:284    .vectorg:00000030 DAbt_Addr
+Common_WinARM/src/Startup.S:287    .vectorg:00000038 IRQ_Wrapper_Addr
+Common_WinARM/src/Startup.S:288    .vectorg:0000003c FIQ_Addr
+Common_WinARM/src/Startup.S:278    .vectorg:00000020 $d
+Common_WinARM/src/Startup.S:324    .init:00000000 Reset_Handler
+Common_WinARM/src/Startup.S:290    .vectorg:00000040 Undef_Handler
+Common_WinARM/src/Startup.S:292    .vectorg:00000044 PAbt_Handler
+Common_WinARM/src/Startup.S:293    .vectorg:00000048 DAbt_Handler
+Common_WinARM/src/Startup.S:507    .vectorg:00000050 __IRQ_Wrapper
+Common_WinARM/src/Startup.S:295    .vectorg:0000004c FIQ_Handler
+Common_WinARM/src/Startup.S:290    .vectorg:00000040 $a
+Common_WinARM/src/Startup.S:318    .init:00000000 $a
+Common_WinARM/src/Startup.S:322    .init:00000000 __startup
+Common_WinARM/src/Startup.S:347    .init:00000030 PLL_Loop
+Common_WinARM/src/Startup.S:369    *ABS*:e01fc040 MEMMAP
+Common_WinARM/src/Startup.S:429    .init:000000cc DataIsEmpty
+Common_WinARM/src/Startup.S:425    .init:000000bc LoopRel
+Common_WinARM/src/Startup.S:441    .init:000000ec BSSIsEmpty
+Common_WinARM/src/Startup.S:438    .init:000000e0 LoopZI
+Common_WinARM/src/Startup.S:447    .init:000000f4 ctor_loop
+Common_WinARM/src/Startup.S:456    .init:00000114 ctor_end
+Common_WinARM/src/Startup.S:472    .init:00000128 __exit_ARM
+Common_WinARM/src/Startup.S:480    .init:0000012c __exit_THUMB
+Common_WinARM/src/Startup.S:477    .init:0000012c $t
+Common_WinARM/src/Startup.S:501    *ABS*:fffff000 VIC_base_addr
+Common_WinARM/src/Startup.S:502    *ABS*:00000030 VIC_vect_offs
+Common_WinARM/src/Startup.S:621    .vectorg:00000094 $d
+Common_WinARM/src/Startup.S:490    .init:0000012e $d
+
+UNDEFINED SYMBOLS
+SoftwareInterrupt
+_etext
+_data
+_edata
+__bss_start__
+__bss_end__
+__ctors_start__
+__ctors_end__
+main

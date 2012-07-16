@@ -1,0 +1,21 @@
+   1              		.file	"gpsmath.c"
+   9              	.Ltext0:
+  10              		.global	gpsDataOkTrigger
+  11              		.bss
+  12              		.align	2
+  15              	gpsDataOkTrigger:
+  16 0000 00000000 		.space	4
+  17              		.comm	GPS_Data,44,4
+  18              		.comm	gps_data_temp,44,4
+  19              		.file 1 "gpsmath.c"
+  20              		.file 2 "gpsmath.h"
+  21              		.text
+  22              	.Letext0:
+DEFINED SYMBOLS
+                            *ABS*:00000000 gpsmath.c
+C:\Users\ivanm\AppData\Local\Temp/ccgRaaaa.s:15     .bss:00000000 gpsDataOkTrigger
+                             .bss:00000000 $d
+                            *COM*:0000002c GPS_Data
+                            *COM*:0000002c gps_data_temp
+
+NO UNDEFINED SYMBOLS

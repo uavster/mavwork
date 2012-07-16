@@ -1,0 +1,90 @@
+   1              		.file	"hardware.c"
+   9              	.Ltext0:
+  10              		.align	2
+  11              		.global	LED
+  13              	LED:
+  14              	.LFB2:
+  15              		.file 1 "hardware.c"
+   1:hardware.c    **** #include "LPC214x.h"
+   2:hardware.c    **** #include "main.h"
+   3:hardware.c    **** #include "system.h"
+   4:hardware.c    **** #include "uart.h"
+   5:hardware.c    **** #include "hardware.h"
+   6:hardware.c    **** #include "irq.h"
+   7:hardware.c    **** 
+   8:hardware.c    **** 
+   9:hardware.c    **** void LED(unsigned char nr, unsigned char onoff) //set or reset LED 0..3
+  10:hardware.c    **** {
+  16              	 Function supports interworking.
+  17              		@ args = 0, pretend = 0, frame = 8
+  18              		@ frame_needed = 1, uses_anonymous_args = 0
+  19              		mov	ip, sp
+  20 0000 0DC0A0E1 	.LCFI0:
+  21              		stmfd	sp!, {fp, ip, lr, pc}
+  22 0004 00D82DE9 	.LCFI1:
+  23              		sub	fp, ip, #4
+  24 0008 04B04CE2 	.LCFI2:
+  25              		sub	sp, sp, #8
+  26 000c 08D04DE2 	.LCFI3:
+  27              		mov	r3, r0
+  28 0010 0030A0E1 		mov	r2, r1
+  29 0014 0120A0E1 		strb	r3, [fp, #-16]
+  30 0018 10304BE5 		mov	r3, r2
+  31 001c 0230A0E1 		strb	r3, [fp, #-20]
+  32 0020 14304BE5 		.loc 1 11 0
+  11:hardware.c    ****   if (nr>=2)
+  33              	16]	@ zero_extendqisi2
+  34 0024 10305BE5 		cmp	r3, #1
+  35 0028 010053E3 		bhi	.L6
+  36 002c 1300008A 		.loc 1 13 0
+  12:hardware.c    ****   	return;
+  13:hardware.c    ****   if(onoff == OFF)
+  37              	b	r3, [fp, #-20]	@ zero_extendqisi2
+  38 0030 14305BE5 		cmp	r3, #0
+  39 0034 000053E3 		bne	.L4
+  40 0038 0800001A 		.loc 1 15 0
+  14:hardware.c    ****   {
+  15:hardware.c    ****     IOSET1 = (1<<(24+nr));
+  41              		r2, #-536870912
+  42 003c 0E22A0E3 		add	r2, r2, #163840
+  43 0040 0A2982E2 		add	r2, r2, #20
+  44 0044 142082E2 		ldrb	r3, [fp, #-16]	@ zero_extendqisi2
+  45 0048 10305BE5 		add	r1, r3, #24
+  46 004c 181083E2 		mov	r3, #1
+  47 0050 0130A0E3 		mov	r3, r3, asl r1
+  48 0054 1331A0E1 		str	r3, [r2, #0]
+  49 0058 003082E5 		b	.L6
+  50 005c 070000EA 	.L4:
+  51              		.loc 1 19 0
+  16:hardware.c    ****   }
+  17:hardware.c    ****   else
+  18:hardware.c    ****   {
+  19:hardware.c    ****     IOCLR1 = (1<<(24+nr));
+  52              	536870912
+  53 0060 0E22A0E3 		add	r2, r2, #163840
+  54 0064 0A2982E2 		add	r2, r2, #28
+  55 0068 1C2082E2 		ldrb	r3, [fp, #-16]	@ zero_extendqisi2
+  56 006c 10305BE5 		add	r1, r3, #24
+  57 0070 181083E2 		mov	r3, #1
+  58 0074 0130A0E3 		mov	r3, r3, asl r1
+  59 0078 1331A0E1 		str	r3, [r2, #0]
+  60 007c 003082E5 	.L6:
+  61              		.loc 1 21 0
+  20:hardware.c    ****   }
+  21:hardware.c    **** }
+  62              	p, #12
+  63 0080 0CD04BE2 		ldmfd	sp, {fp, sp, lr}
+  64 0084 00689DE8 		bx	lr
+  65 0088 1EFF2FE1 	.LFE2:
+  67              		.comm	GPS_timeout,4,4
+  68              		.comm	GPS_init_status,1,1
+  69              		.section	.debug_frame,"",%progbits
+ 112              		.section	.debug_loc,"",%progbits
+DEFINED SYMBOLS
+                            *ABS*:00000000 hardware.c
+C:\Users\Nacho\AppData\Local\Temp/ccmIaaaa.s:13     .text:00000000 LED
+C:\Users\Nacho\AppData\Local\Temp/ccmIaaaa.s:20     .text:00000000 $a
+                            *COM*:00000004 GPS_timeout
+                            *COM*:00000001 GPS_init_status
+
+NO UNDEFINED SYMBOLS

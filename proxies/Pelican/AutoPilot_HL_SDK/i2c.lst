@@ -1,0 +1,1038 @@
+   1              		.file	"i2c.c"
+   9              	.Ltext0:
+  10              		.global	I2CMasterState
+  11              		.bss
+  12              		.align	2
+  15              	I2CMasterState:
+  16 0000 00000000 		.space	4
+  17              		.global	I2CSlaveState
+  18              		.align	2
+  21              	I2CSlaveState:
+  22 0004 00000000 		.space	4
+  23              		.global	I2CCount
+  24              		.align	2
+  27              	I2CCount:
+  28 0008 00000000 		.space	4
+  29              		.global	RdIndex
+  30              		.align	2
+  33              	RdIndex:
+  34 000c 00000000 		.space	4
+  35              		.global	WrIndex
+  36              		.align	2
+  39              	WrIndex:
+  40 0010 00000000 		.space	4
+  41              		.text
+  42              		.align	2
+  43              		.global	I2C0MasterHandler
+  45              	I2C0MasterHandler:
+  46              	.LFB2:
+  47              		.file 1 "i2c.c"
+   1:i2c.c         **** /*****************************************************************************
+   2:i2c.c         ****  *   i2c.c:  I2C C file for Philips LPC214x Family Microprocessors
+   3:i2c.c         ****  *
+   4:i2c.c         ****  *   Copyright(C) 2006, Philips Semiconductor
+   5:i2c.c         ****  *   All rights reserved.
+   6:i2c.c         ****  *
+   7:i2c.c         ****  *   History
+   8:i2c.c         ****  *   2005.10.01  ver 1.00    Prelimnary version, first Release
+   9:i2c.c         ****  *
+  10:i2c.c         **** *****************************************************************************/
+  11:i2c.c         **** #include "LPC214x.h"                        /* LPC21xx definitions */
+  12:i2c.c         **** #include "type.h"
+  13:i2c.c         **** #include "irq.h"
+  14:i2c.c         **** #include "i2c.h"
+  15:i2c.c         **** 
+  16:i2c.c         **** DWORD I2CMasterState = I2C_IDLE;
+  17:i2c.c         **** DWORD I2CSlaveState = I2C_IDLE;
+  18:i2c.c         **** 
+  19:i2c.c         **** DWORD I2CCmd;
+  20:i2c.c         **** DWORD I2CMode;
+  21:i2c.c         **** 
+  22:i2c.c         **** BYTE I2CMasterBuffer[BUFSIZE];
+  23:i2c.c         **** BYTE I2CSlaveBuffer[BUFSIZE];
+  24:i2c.c         **** DWORD I2CCount = 0;
+  25:i2c.c         **** DWORD I2CReadLength;
+  26:i2c.c         **** DWORD I2CWriteLength;
+  27:i2c.c         **** 
+  28:i2c.c         **** DWORD RdIndex = 0;
+  29:i2c.c         **** DWORD WrIndex = 0;
+  30:i2c.c         **** 
+  31:i2c.c         **** /* 
+  32:i2c.c         **** From device to device, the I2C communication protocol may vary, 
+  33:i2c.c         **** in the example below, the protocol uses repeated start to read data from or 
+  34:i2c.c         **** write to the device:
+  35:i2c.c         **** For master read: the sequence is: STA,Addr(W),offset,RE-STA,Addr(w),data...STO 
+  36:i2c.c         **** for master write: the sequence is: STA,Addr(W),length,RE-STA,Addr(r),data...STO
+  37:i2c.c         **** Thus, in state 8, the address is always WRITE. in state 10, the address could 
+  38:i2c.c         **** be READ or WRITE depending on the I2CCmd.
+  39:i2c.c         **** */   
+  40:i2c.c         **** 
+  41:i2c.c         **** /*****************************************************************************
+  42:i2c.c         **** ** Function name:		I2C0MasterHandler
+  43:i2c.c         **** **
+  44:i2c.c         **** ** Descriptions:		I2C0 interrupt handler, deal with master mode
+  45:i2c.c         **** **				only.
+  46:i2c.c         **** **
+  47:i2c.c         **** ** parameters:			None
+  48:i2c.c         **** ** Returned value:		None
+  49:i2c.c         **** ** 
+  50:i2c.c         **** *****************************************************************************/
+  51:i2c.c         **** void I2C0MasterHandler (void) __irq 
+  52:i2c.c         **** {
+  48              	
+  49              		@ args = 0, pretend = 0, frame = 4
+  50              		@ frame_needed = 1, uses_anonymous_args = 0
+  51              		mov	ip, sp
+  52 0000 0DC0A0E1 	.LCFI0:
+  53              		stmfd	sp!, {fp, ip, lr, pc}
+  54 0004 00D82DE9 	.LCFI1:
+  55              		sub	fp, ip, #4
+  56 0008 04B04CE2 	.LCFI2:
+  57              		sub	sp, sp, #4
+  58 000c 04D04DE2 	.LCFI3:
+  59              		.loc 1 56 0
+  53:i2c.c         ****     BYTE StatValue;
+  54:i2c.c         **** 
+  55:i2c.c         ****     /* this handler deals with master read and master write only */
+  56:i2c.c         ****     StatValue = I20STAT;
+  60              	536870908
+  61 0010 4E32A0E3 		add	r3, r3, #114688
+  62 0014 073983E2 		ldr	r3, [r3, #0]
+  63 0018 003093E5 		strb	r3, [fp, #-13]
+  64 001c 0D304BE5 		.loc 1 59 0
+  57:i2c.c         ****     
+  58:i2c.c         ****     IENABLE;   
+  59:i2c.c         ****     switch ( StatValue )
+  65              		r3, [fp, #-13]	@ zero_extendqisi2
+  66 0020 0D305BE5 		sub	r3, r3, #8
+  67 0024 083043E2 		cmp	r3, #80
+  68 0028 500053E3 		ldrls	pc, [pc, r3, asl #2]
+  69 002c 03F19F97 		b	.L2
+  70 0030 060100EA 		.p2align 2
+  71              	.L10:
+  72              		.word	.L3
+  73 0034 78010000 		.word	.L2
+  74 0038 50040000 		.word	.L2
+  75 003c 50040000 		.word	.L2
+  76 0040 50040000 		.word	.L2
+  77 0044 50040000 		.word	.L2
+  78 0048 50040000 		.word	.L2
+  79 004c 50040000 		.word	.L2
+  80 0050 50040000 		.word	.L4
+  81 0054 B0010000 		.word	.L2
+  82 0058 50040000 		.word	.L2
+  83 005c 50040000 		.word	.L2
+  84 0060 50040000 		.word	.L2
+  85 0064 50040000 		.word	.L2
+  86 0068 50040000 		.word	.L2
+  87 006c 50040000 		.word	.L2
+  88 0070 50040000 		.word	.L5
+  89 0074 08020000 		.word	.L2
+  90 0078 50040000 		.word	.L2
+  91 007c 50040000 		.word	.L2
+  92 0080 50040000 		.word	.L2
+  93 0084 50040000 		.word	.L2
+  94 0088 50040000 		.word	.L2
+  95 008c 50040000 		.word	.L2
+  96 0090 50040000 		.word	.L6
+  97 0094 2C040000 		.word	.L2
+  98 0098 50040000 		.word	.L2
+  99 009c 50040000 		.word	.L2
+ 100 00a0 50040000 		.word	.L2
+ 101 00a4 50040000 		.word	.L2
+ 102 00a8 50040000 		.word	.L2
+ 103 00ac 50040000 		.word	.L2
+ 104 00b0 50040000 		.word	.L7
+ 105 00b4 70020000 		.word	.L2
+ 106 00b8 50040000 		.word	.L2
+ 107 00bc 50040000 		.word	.L2
+ 108 00c0 50040000 		.word	.L2
+ 109 00c4 50040000 		.word	.L2
+ 110 00c8 50040000 		.word	.L2
+ 111 00cc 50040000 		.word	.L2
+ 112 00d0 50040000 		.word	.L7
+ 113 00d4 70020000 		.word	.L2
+ 114 00d8 50040000 		.word	.L2
+ 115 00dc 50040000 		.word	.L2
+ 116 00e0 50040000 		.word	.L2
+ 117 00e4 50040000 		.word	.L2
+ 118 00e8 50040000 		.word	.L2
+ 119 00ec 50040000 		.word	.L2
+ 120 00f0 50040000 		.word	.L2
+ 121 00f4 50040000 		.word	.L2
+ 122 00f8 50040000 		.word	.L2
+ 123 00fc 50040000 		.word	.L2
+ 124 0100 50040000 		.word	.L2
+ 125 0104 50040000 		.word	.L2
+ 126 0108 50040000 		.word	.L2
+ 127 010c 50040000 		.word	.L2
+ 128 0110 50040000 		.word	.L8
+ 129 0114 74030000 		.word	.L2
+ 130 0118 50040000 		.word	.L2
+ 131 011c 50040000 		.word	.L2
+ 132 0120 50040000 		.word	.L2
+ 133 0124 50040000 		.word	.L2
+ 134 0128 50040000 		.word	.L2
+ 135 012c 50040000 		.word	.L2
+ 136 0130 50040000 		.word	.L6
+ 137 0134 2C040000 		.word	.L2
+ 138 0138 50040000 		.word	.L2
+ 139 013c 50040000 		.word	.L2
+ 140 0140 50040000 		.word	.L2
+ 141 0144 50040000 		.word	.L2
+ 142 0148 50040000 		.word	.L2
+ 143 014c 50040000 		.word	.L2
+ 144 0150 50040000 		.word	.L9
+ 145 0154 8C030000 		.word	.L2
+ 146 0158 50040000 		.word	.L2
+ 147 015c 50040000 		.word	.L2
+ 148 0160 50040000 		.word	.L2
+ 149 0164 50040000 		.word	.L2
+ 150 0168 50040000 		.word	.L2
+ 151 016c 50040000 		.word	.L2
+ 152 0170 50040000 		.word	.L9
+ 153 0174 8C030000 	.L3:
+ 154              		.loc 1 62 0
+  60:i2c.c         ****     {
+  61:i2c.c         **** 	case 0x08:			/* A Start condition is issued. */
+  62:i2c.c         **** 	I20DAT = I2CMasterBuffer[0];
+ 155              	si2
+ 156 0178 8E22A0E3 		str	r3, [r2, #0]
+ 157 017c 072982E2 		.loc 1 63 0
+ 158 0180 F8329FE5 		mov	r3, #-536870912
+ 159 0184 0030D3E5 		add	r3, r3, #114688
+ 160 0188 003082E5 		add	r3, r3, #24
+  63:i2c.c         **** 	I20CONCLR = (I2CONCLR_SIC | I2CONCLR_STAC);
+ 161              	2, #40
+ 162 018c 0E32A0E3 		str	r2, [r3, #0]
+ 163 0190 073983E2 		.loc 1 64 0
+ 164 0194 183083E2 		ldr	r2, .L30+4
+ 165 0198 2820A0E3 		mov	r3, #1
+ 166 019c 002083E5 		str	r3, [r2, #0]
+  64:i2c.c         **** 	I2CMasterState = I2C_STARTED;
+ 167              	1 65 0
+ 168 01a0 DC229FE5 		b	.L11
+ 169 01a4 0130A0E3 	.L4:
+ 170 01a8 003082E5 		.loc 1 68 0
+  65:i2c.c         **** 	break;
+ 171              		r3, .L30+8
+ 172 01ac AC0000EA 		ldr	r3, [r3, #0]
+ 173              		cmp	r3, #1
+  66:i2c.c         **** 	
+  67:i2c.c         **** 	case 0x10:			/* A repeated started is issued */
+  68:i2c.c         **** 	if (  I2CCmd == GET_DEVICE_ID || I2CCmd == GET_TEMPERATURE )
+ 174              	q	.L12
+ 175 01b0 D0329FE5 		ldr	r3, .L30+8
+ 176 01b4 003093E5 		ldr	r3, [r3, #0]
+ 177 01b8 010053E3 		cmp	r3, #2
+ 178 01bc 0300000A 		bne	.L14
+ 179 01c0 C0329FE5 	.L12:
+ 180 01c4 003093E5 		.loc 1 70 0
+ 181 01c8 020053E3 		mov	r2, #-536870904
+ 182 01cc 0400001A 		add	r2, r2, #114688
+ 183              		ldr	r3, .L30
+  69:i2c.c         **** 	{
+  70:i2c.c         **** 	    I20DAT = I2CMasterBuffer[2];
+ 184              	[r3, #2]	@ zero_extendqisi2
+ 185 01d0 8E22A0E3 		str	r3, [r2, #0]
+ 186 01d4 072982E2 	.L14:
+ 187 01d8 A0329FE5 		.loc 1 72 0
+ 188 01dc 0230D3E5 		mov	r3, #-536870912
+ 189 01e0 003082E5 		add	r3, r3, #114688
+ 190              		add	r3, r3, #24
+  71:i2c.c         **** 	}
+  72:i2c.c         **** 	I20CONCLR = (I2CONCLR_SIC | I2CONCLR_STAC);
+ 191              	, #40
+ 192 01e4 0E32A0E3 		str	r2, [r3, #0]
+ 193 01e8 073983E2 		.loc 1 73 0
+ 194 01ec 183083E2 		ldr	r2, .L30+4
+ 195 01f0 2820A0E3 		mov	r3, #2
+ 196 01f4 002083E5 		str	r3, [r2, #0]
+  73:i2c.c         **** 	I2CMasterState = I2C_RESTARTED;
+ 197              	1 74 0
+ 198 01f8 84229FE5 		b	.L11
+ 199 01fc 0230A0E3 	.L5:
+ 200 0200 003082E5 		.loc 1 77 0
+  74:i2c.c         **** 	break;
+ 201              		r3, .L30+4
+ 202 0204 960000EA 		ldr	r3, [r3, #0]
+ 203              		cmp	r3, #1
+  75:i2c.c         **** 	
+  76:i2c.c         **** 	case 0x18:			/* Regardless, it's a ACK */
+  77:i2c.c         **** 	if ( I2CMasterState == I2C_STARTED )
+ 204              	e	.L15
+ 205 0208 74329FE5 		.loc 1 79 0
+ 206 020c 003093E5 		mov	r2, #-536870904
+ 207 0210 010053E3 		add	r2, r2, #114688
+ 208 0214 0F00001A 		ldr	r3, .L30+12
+  78:i2c.c         **** 	{
+  79:i2c.c         **** 	    I20DAT = I2CMasterBuffer[1+WrIndex];
+ 209              	r3, [r3, #0]
+ 210 0218 8E22A0E3 		add	r1, r3, #1
+ 211 021c 072982E2 		ldr	r3, .L30
+ 212 0220 64329FE5 		ldrb	r3, [r3, r1]	@ zero_extendqisi2
+ 213 0224 003093E5 		str	r3, [r2, #0]
+ 214 0228 011083E2 		.loc 1 80 0
+ 215 022c 4C329FE5 		ldr	r3, .L30+12
+ 216 0230 0130D3E7 		ldr	r3, [r3, #0]
+ 217 0234 003082E5 		add	r2, r3, #1
+  80:i2c.c         **** 	    WrIndex++;
+ 218              	.L30+12
+ 219 0238 4C329FE5 		str	r2, [r3, #0]
+ 220 023c 003093E5 		.loc 1 81 0
+ 221 0240 012083E2 		ldr	r2, .L30+4
+ 222 0244 40329FE5 		mov	r3, #4
+ 223 0248 002083E5 		str	r3, [r2, #0]
+  81:i2c.c         **** 	    I2CMasterState = DATA_ACK;
+ 224              		.loc 1 83 0
+ 225 024c 30229FE5 		mov	r3, #-536870912
+ 226 0250 0430A0E3 		add	r3, r3, #114688
+ 227 0254 003082E5 		add	r3, r3, #24
+ 228              		mov	r2, #8
+  82:i2c.c         **** 	}
+  83:i2c.c         **** 	I20CONCLR = I2CONCLR_SIC;
+ 229              	r2, [r3, #0]
+ 230 0258 0E32A0E3 		.loc 1 84 0
+ 231 025c 073983E2 		b	.L11
+ 232 0260 183083E2 	.L7:
+ 233 0264 0820A0E3 		.loc 1 88 0
+ 234 0268 002083E5 		ldr	r3, .L30+12
+  84:i2c.c         **** 	break;
+ 235              	2, [r3, #0]
+ 236 026c 7C0000EA 		ldr	r3, .L30+16
+ 237              		ldr	r3, [r3, #0]
+  85:i2c.c         **** 	
+  86:i2c.c         **** 	case 0x28:	/* Data byte has been transmitted, regardless ACK or NACK */
+  87:i2c.c         **** 	case 0x30:
+  88:i2c.c         **** 	if ( WrIndex != I2CWriteLength )
+ 238              	p	r2, r3
+ 239 0270 14329FE5 		beq	.L17
+ 240 0274 002093E5 		.loc 1 90 0
+ 241 0278 10329FE5 		mov	r2, #-536870904
+ 242 027c 003093E5 		add	r2, r2, #114688
+ 243 0280 030052E1 		ldr	r3, .L30+12
+ 244 0284 2500000A 		ldr	r3, [r3, #0]
+  89:i2c.c         **** 	{   
+  90:i2c.c         **** 	    I20DAT = I2CMasterBuffer[1+WrIndex]; /* this should be the last one */
+ 245              	, r3, #1
+ 246 0288 8E22A0E3 		ldr	r3, .L30
+ 247 028c 072982E2 		ldrb	r3, [r3, r1]	@ zero_extendqisi2
+ 248 0290 F4319FE5 		str	r3, [r2, #0]
+ 249 0294 003093E5 		.loc 1 91 0
+ 250 0298 011083E2 		ldr	r3, .L30+12
+ 251 029c DC319FE5 		ldr	r3, [r3, #0]
+ 252 02a0 0130D3E7 		add	r2, r3, #1
+ 253 02a4 003082E5 		ldr	r3, .L30+12
+  91:i2c.c         **** 	    WrIndex++;
+ 254              	[r3, #0]
+ 255 02a8 DC319FE5 		.loc 1 92 0
+ 256 02ac 003093E5 		ldr	r3, .L30+12
+ 257 02b0 012083E2 		ldr	r2, [r3, #0]
+ 258 02b4 D0319FE5 		ldr	r3, .L30+16
+ 259 02b8 002083E5 		ldr	r3, [r3, #0]
+  92:i2c.c         **** 	    if ( WrIndex != I2CWriteLength )
+ 260              	2, r3
+ 261 02bc C8319FE5 		beq	.L19
+ 262 02c0 002093E5 		.loc 1 94 0
+ 263 02c4 C4319FE5 		ldr	r2, .L30+4
+ 264 02c8 003093E5 		mov	r3, #4
+ 265 02cc 030052E1 		str	r3, [r2, #0]
+ 266 02d0 0300000A 		b	.L23
+  93:i2c.c         **** 	    {   
+  94:i2c.c         **** 		I2CMasterState = DATA_ACK;
+ 267              	.loc 1 98 0
+ 268 02d4 A8219FE5 		ldr	r2, .L30+4
+ 269 02d8 0430A0E3 		mov	r3, #5
+ 270 02dc 003082E5 		str	r3, [r2, #0]
+ 271 02e0 1D0000EA 		.loc 1 99 0
+ 272              		ldr	r3, .L30+20
+  95:i2c.c         **** 	    }
+  96:i2c.c         **** 	    else
+  97:i2c.c         **** 	    {
+  98:i2c.c         **** 		I2CMasterState = DATA_NACK;
+ 273              	3, [r3, #0]
+ 274 02e4 98219FE5 		cmp	r3, #0
+ 275 02e8 0530A0E3 		beq	.L23
+ 276 02ec 003082E5 		.loc 1 101 0
+  99:i2c.c         **** 		if ( I2CReadLength != 0 )
+ 277              		r3, #-536870912
+ 278 02f0 9C319FE5 		add	r3, r3, #114688
+ 279 02f4 003093E5 		mov	r2, #32
+ 280 02f8 000053E3 		str	r2, [r3, #0]
+ 281 02fc 1600000A 		.loc 1 102 0
+ 100:i2c.c         **** 		{
+ 101:i2c.c         **** 		    I20CONSET = I2CONSET_STA;	/* Set Repeated-start flag */
+ 282              	r2, .L30+4
+ 283 0300 0E32A0E3 		mov	r3, #3
+ 284 0304 073983E2 		str	r3, [r2, #0]
+ 285 0308 2020A0E3 		b	.L23
+ 286 030c 002083E5 	.L17:
+ 102:i2c.c         **** 		    I2CMasterState = I2C_REPEATED_START;
+ 287              	 1 108 0
+ 288 0310 6C219FE5 		ldr	r3, .L30+20
+ 289 0314 0330A0E3 		ldr	r3, [r3, #0]
+ 290 0318 003082E5 		cmp	r3, #0
+ 291 031c 0E0000EA 		beq	.L24
+ 292              		.loc 1 110 0
+ 103:i2c.c         **** 		}
+ 104:i2c.c         **** 	    }
+ 105:i2c.c         **** 	}
+ 106:i2c.c         **** 	else
+ 107:i2c.c         **** 	{
+ 108:i2c.c         **** 	    if ( I2CReadLength != 0 )
+ 293              	3, #-536870912
+ 294 0320 6C319FE5 		add	r3, r3, #114688
+ 295 0324 003093E5 		mov	r2, #32
+ 296 0328 000053E3 		str	r2, [r3, #0]
+ 297 032c 0700000A 		.loc 1 111 0
+ 109:i2c.c         **** 	    {
+ 110:i2c.c         **** 		I20CONSET = I2CONSET_STA;	/* Set Repeated-start flag */
+ 298              	r2, .L30+4
+ 299 0330 0E32A0E3 		mov	r3, #3
+ 300 0334 073983E2 		str	r3, [r2, #0]
+ 301 0338 2020A0E3 		b	.L23
+ 302 033c 002083E5 	.L24:
+ 111:i2c.c         **** 		I2CMasterState = I2C_REPEATED_START;
+ 303              	 1 115 0
+ 304 0340 3C219FE5 		ldr	r2, .L30+4
+ 305 0344 0330A0E3 		mov	r3, #5
+ 306 0348 003082E5 		str	r3, [r2, #0]
+ 307 034c 020000EA 	.L23:
+ 308              		.loc 1 118 0
+ 112:i2c.c         **** 	    }
+ 113:i2c.c         **** 	    else
+ 114:i2c.c         **** 	    {
+ 115:i2c.c         **** 		I2CMasterState = DATA_NACK;
+ 309              	3, #-536870912
+ 310 0350 2C219FE5 		add	r3, r3, #114688
+ 311 0354 0530A0E3 		add	r3, r3, #24
+ 312 0358 003082E5 		mov	r2, #8
+ 313              		str	r2, [r3, #0]
+ 116:i2c.c         **** 	    }
+ 117:i2c.c         **** 	}
+ 118:i2c.c         **** 	I20CONCLR = I2CONCLR_SIC;
+ 314              	 1 119 0
+ 315 035c 0E32A0E3 		b	.L11
+ 316 0360 073983E2 	.L8:
+ 317 0364 183083E2 		.loc 1 122 0
+ 318 0368 0820A0E3 		mov	r3, #-536870912
+ 319 036c 002083E5 		add	r3, r3, #114688
+ 119:i2c.c         **** 	break;
+ 320              	3, r3, #24
+ 321 0370 3B0000EA 		mov	r2, #8
+ 322              		str	r2, [r3, #0]
+ 120:i2c.c         **** 	
+ 121:i2c.c         **** 	case 0x40:	/* Master Receive, SLA_R has been sent */
+ 122:i2c.c         **** 	I20CONCLR = I2CONCLR_SIC;
+ 323              	oc 1 123 0
+ 324 0374 0E32A0E3 		b	.L11
+ 325 0378 073983E2 	.L9:
+ 326 037c 183083E2 		.loc 1 127 0
+ 327 0380 0820A0E3 		ldr	r3, .L30+24
+ 328 0384 002083E5 		ldr	r3, [r3, #0]
+ 123:i2c.c         **** 	break;
+ 329              	1, r3, #3
+ 330 0388 350000EA 		mov	r3, #-536870904
+ 331              		add	r3, r3, #114688
+ 124:i2c.c         **** 	
+ 125:i2c.c         **** 	case 0x50:	/* Data byte has been received, regardless following ACK or NACK */
+ 126:i2c.c         **** 	case 0x58:
+ 127:i2c.c         **** 	I2CMasterBuffer[3+RdIndex] = I20DAT;
+ 332              	r	r3, [r3, #0]
+ 333 038c 04319FE5 		and	r3, r3, #255
+ 334 0390 003093E5 		ldr	r2, .L30
+ 335 0394 031083E2 		strb	r3, [r2, r1]
+ 336 0398 8E32A0E3 		.loc 1 128 0
+ 337 039c 073983E2 		ldr	r3, .L30+24
+ 338 03a0 003093E5 		ldr	r3, [r3, #0]
+ 339 03a4 FF3003E2 		add	r2, r3, #1
+ 340 03a8 D0209FE5 		ldr	r3, .L30+24
+ 341 03ac 0130C2E7 		str	r2, [r3, #0]
+ 128:i2c.c         **** 	RdIndex++;
+ 342              	9 0
+ 343 03b0 E0309FE5 		ldr	r3, .L30+24
+ 344 03b4 003093E5 		ldr	r2, [r3, #0]
+ 345 03b8 012083E2 		ldr	r3, .L30+20
+ 346 03bc D4309FE5 		ldr	r3, [r3, #0]
+ 347 03c0 002083E5 		cmp	r2, r3
+ 129:i2c.c         **** 	if ( RdIndex != I2CReadLength )
+ 348              	L26
+ 349 03c4 CC309FE5 		.loc 1 131 0
+ 350 03c8 002093E5 		ldr	r2, .L30+4
+ 351 03cc C0309FE5 		mov	r3, #4
+ 352 03d0 003093E5 		str	r3, [r2, #0]
+ 353 03d4 030052E1 		b	.L28
+ 354 03d8 0300000A 	.L26:
+ 130:i2c.c         **** 	{   
+ 131:i2c.c         **** 	    I2CMasterState = DATA_ACK;
+ 355              	 135 0
+ 356 03dc A0209FE5 		ldr	r2, .L30+24
+ 357 03e0 0430A0E3 		mov	r3, #0
+ 358 03e4 003082E5 		str	r3, [r2, #0]
+ 359 03e8 050000EA 		.loc 1 136 0
+ 360              		ldr	r2, .L30+4
+ 132:i2c.c         **** 	}
+ 133:i2c.c         **** 	else
+ 134:i2c.c         **** 	{
+ 135:i2c.c         **** 	    RdIndex = 0;
+ 361              	3, #5
+ 362 03ec A4209FE5 		str	r3, [r2, #0]
+ 363 03f0 0030A0E3 	.L28:
+ 364 03f4 003082E5 		.loc 1 138 0
+ 136:i2c.c         **** 	    I2CMasterState = DATA_NACK;
+ 365              		r3, #-536870912
+ 366 03f8 84209FE5 		add	r3, r3, #114688
+ 367 03fc 0530A0E3 		mov	r2, #4
+ 368 0400 003082E5 		str	r2, [r3, #0]
+ 369              		.loc 1 139 0
+ 137:i2c.c         **** 	}
+ 138:i2c.c         **** 	I20CONSET = I2CONSET_AA;	/* assert ACK after data is received */
+ 370              	r3, #-536870912
+ 371 0404 0E32A0E3 		add	r3, r3, #114688
+ 372 0408 073983E2 		add	r3, r3, #24
+ 373 040c 0420A0E3 		mov	r2, #8
+ 374 0410 002083E5 		str	r2, [r3, #0]
+ 139:i2c.c         **** 	I20CONCLR = I2CONCLR_SIC;
+ 375              	 1 140 0
+ 376 0414 0E32A0E3 		b	.L11
+ 377 0418 073983E2 	.L6:
+ 378 041c 183083E2 		.loc 1 144 0
+ 379 0420 0820A0E3 		mov	r3, #-536870912
+ 380 0424 002083E5 		add	r3, r3, #114688
+ 140:i2c.c         **** 	break;
+ 381              	3, r3, #24
+ 382 0428 0D0000EA 		mov	r2, #8
+ 383              		str	r2, [r3, #0]
+ 141:i2c.c         **** 	
+ 142:i2c.c         **** 	case 0x20:			/* regardless, it's a NACK */
+ 143:i2c.c         **** 	case 0x48:
+ 144:i2c.c         **** 	I20CONCLR = I2CONCLR_SIC;
+ 384              	oc 1 145 0
+ 385 042c 0E32A0E3 		ldr	r2, .L30+4
+ 386 0430 073983E2 		mov	r3, #5
+ 387 0434 183083E2 		str	r3, [r2, #0]
+ 388 0438 0820A0E3 		.loc 1 146 0
+ 389 043c 002083E5 		b	.L11
+ 145:i2c.c         **** 	I2CMasterState = DATA_NACK;
+ 390              	.loc 1 151 0
+ 391 0440 3C209FE5 		mov	r3, #-536870912
+ 392 0444 0530A0E3 		add	r3, r3, #114688
+ 393 0448 003082E5 		add	r3, r3, #24
+ 146:i2c.c         **** 	break;
+ 394              		r2, #8
+ 395 044c 040000EA 		str	r2, [r3, #0]
+ 396              	.L11:
+ 147:i2c.c         **** 	
+ 148:i2c.c         **** 	case 0x38:			/* Arbitration lost, in this example, we don't
+ 149:i2c.c         **** 					deal with multiple master situation */
+ 150:i2c.c         **** 	default:
+ 151:i2c.c         **** 	I20CONCLR = I2CONCLR_SIC;	
+ 397              	oc 1 156 0
+ 398 0450 0E32A0E3 		mov	r3, #0
+ 399 0454 073983E2 		sub	r3, r3, #4048
+ 400 0458 183083E2 		mov	r2, #0
+ 401 045c 0820A0E3 		str	r2, [r3, #0]
+ 402 0460 002083E5 		.loc 1 158 0
+ 403              		sub	sp, fp, #12
+ 152:i2c.c         **** 	break;
+ 153:i2c.c         ****     }
+ 154:i2c.c         ****     
+ 155:i2c.c         ****     IDISABLE;
+ 156:i2c.c         ****     VICVectAddr = 0;		/* Acknowledge Interrupt */
+ 404              	sp, {fp, sp, lr}
+ 405 0464 0030A0E3 		bx	lr
+ 406 0468 FD3E43E2 	.L31:
+ 407 046c 0020A0E3 		.align	2
+ 408 0470 002083E5 	.L30:
+ 157:i2c.c         **** 
+ 158:i2c.c         **** }
+ 409              	d	I2CMasterBuffer
+ 410 0474 0CD04BE2 		.word	I2CMasterState
+ 411 0478 00689DE8 		.word	I2CCmd
+ 412 047c 1EFF2FE1 		.word	WrIndex
+ 413              		.word	I2CWriteLength
+ 414              		.word	I2CReadLength
+ 415              		.word	RdIndex
+ 416 0480 00000000 	.LFE2:
+ 418 0488 00000000 		.align	2
+ 419 048c 00000000 		.global	I2C0_send_motordata
+ 421 0494 00000000 	I2C0_send_motordata:
+ 422 0498 00000000 	.LFB3:
+ 423              		.loc 1 162 0
+ 424              		@ Function supports interworking.
+ 425              		@ args = 0, pretend = 0, frame = 0
+ 426              		@ frame_needed = 1, uses_anonymous_args = 0
+ 427              		mov	ip, sp
+ 428              	.LCFI4:
+ 429              		stmfd	sp!, {fp, ip, lr, pc}
+ 159:i2c.c         **** 
+ 160:i2c.c         **** 
+ 161:i2c.c         **** void I2C0_send_motordata(void)
+ 162:i2c.c         **** {
+ 430              	#4
+ 431              	.LCFI6:
+ 432              		.loc 1 163 0
+ 433              		ldr	r2, .L34
+ 434 049c 0DC0A0E1 		mov	r3, #0
+ 435              		str	r3, [r2, #0]
+ 436 04a0 00D82DE9 		.loc 1 164 0
+ 437              		ldr	r2, .L34+4
+ 438 04a4 04B04CE2 		mov	r3, #0
+ 439              		str	r3, [r2, #0]
+ 163:i2c.c         **** 	WrIndex=0;
+ 440              	5 0
+ 441 04a8 80209FE5 		ldr	r2, .L34+8
+ 442 04ac 0030A0E3 		mov	r3, #5
+ 443 04b0 003082E5 		str	r3, [r2, #0]
+ 164:i2c.c         **** 	RdIndex=0;
+ 444              	c 1 166 0
+ 445 04b4 78209FE5 		ldr	r2, .L34+12
+ 446 04b8 0030A0E3 		mov	r3, #0
+ 447 04bc 003082E5 		str	r3, [r2, #0]
+ 165:i2c.c         **** 	I2CWriteLength = 5;
+ 448              	c 1 167 0
+ 449 04c0 70209FE5 		ldr	r2, .L34+16
+ 450 04c4 0530A0E3 		mov	r3, #2
+ 451 04c8 003082E5 		strb	r3, [r2, #0]
+ 166:i2c.c         **** 	I2CReadLength = 0;
+ 452              	c 1 168 0
+ 453 04cc 68209FE5 		ldr	r2, .L34+16
+ 454 04d0 0030A0E3 		mov	r3, #100
+ 455 04d4 003082E5 		strb	r3, [r2, #1]
+ 167:i2c.c         ****     I2CMasterBuffer[0] = 0x02;
+ 456              	c 1 169 0
+ 457 04d8 60209FE5 		ldr	r2, .L34+16
+ 458 04dc 0230A0E3 		mov	r3, #100
+ 459 04e0 0030C2E5 		strb	r3, [r2, #2]
+ 168:i2c.c         ****     I2CMasterBuffer[1] = 100;
+ 460              	c 1 170 0
+ 461 04e4 54209FE5 		ldr	r2, .L34+16
+ 462 04e8 6430A0E3 		mov	r3, #100
+ 463 04ec 0130C2E5 		strb	r3, [r2, #3]
+ 169:i2c.c         ****     I2CMasterBuffer[2] = 100;
+ 464              	c 1 171 0
+ 465 04f0 48209FE5 		ldr	r2, .L34+16
+ 466 04f4 6430A0E3 		mov	r3, #1
+ 467 04f8 0230C2E5 		strb	r3, [r2, #4]
+ 170:i2c.c         ****     I2CMasterBuffer[3] = 100;
+ 468              	c 1 175 0
+ 469 04fc 3C209FE5 		ldr	r2, .L34+20
+ 470 0500 6430A0E3 		mov	r3, #2
+ 471 0504 0330C2E5 		str	r3, [r2, #0]
+ 171:i2c.c         ****     I2CMasterBuffer[4] = 1;
+ 472              	c 1 176 0
+ 473 0508 30209FE5 		bl	I2CEngine
+ 474 050c 0130A0E3 		.loc 1 177 0
+ 475 0510 0430C2E5 		sub	sp, fp, #12
+ 172:i2c.c         **** 
+ 173:i2c.c         ****     //I20CONSET = I2CONSET_STA;	/* Set Start flag */
+ 174:i2c.c         ****     //if ( !I2CStart() ) I2CStop();
+ 175:i2c.c         ****     I2CCmd = GET_TEMPERATURE;
+ 476              	fd	sp, {fp, sp, lr}
+ 477 0514 28209FE5 		bx	lr
+ 478 0518 0230A0E3 	.L35:
+ 479 051c 003082E5 		.align	2
+ 176:i2c.c         **** 	I2CEngine();
+ 480              	:
+ 481 0520 FEFFFFEB 		.word	WrIndex
+ 177:i2c.c         **** }
+ 482              	word	RdIndex
+ 483 0524 0CD04BE2 		.word	I2CWriteLength
+ 484 0528 00689DE8 		.word	I2CReadLength
+ 485 052c 1EFF2FE1 		.word	I2CMasterBuffer
+ 486              		.word	I2CCmd
+ 487              	.LFE3:
+ 489 0530 00000000 		.align	2
+ 490 0534 00000000 		.global	I2CStart
+ 492 053c 00000000 	I2CStart:
+ 493 0540 00000000 	.LFB4:
+ 494 0544 00000000 		.loc 1 191 0
+ 495              		@ Function supports interworking.
+ 496              		@ args = 0, pretend = 0, frame = 8
+ 497              		@ frame_needed = 1, uses_anonymous_args = 0
+ 498              		mov	ip, sp
+ 499              	.LCFI7:
+ 500              		stmfd	sp!, {fp, ip, lr, pc}
+ 501              	.LCFI8:
+ 178:i2c.c         **** 
+ 179:i2c.c         **** /*****************************************************************************
+ 180:i2c.c         **** ** Function name:		I2CStart
+ 181:i2c.c         **** **
+ 182:i2c.c         **** ** Descriptions:		Create I2C start condition, a timeout
+ 183:i2c.c         **** **				value is set if the I2C never gets started,
+ 184:i2c.c         **** **				and timed out. It's a fatal error. 
+ 185:i2c.c         **** **
+ 186:i2c.c         **** ** parameters:			None
+ 187:i2c.c         **** ** Returned value:		true or false, return false if timed out
+ 188:i2c.c         **** ** 
+ 189:i2c.c         **** *****************************************************************************/
+ 190:i2c.c         **** unsigned int I2CStart( void )
+ 191:i2c.c         **** {
+ 502              	I9:
+ 503              		sub	sp, sp, #8
+ 504              	.LCFI10:
+ 505              		.loc 1 192 0
+ 506 0548 0DC0A0E1 		mov	r3, #0
+ 507              		str	r3, [fp, #-20]
+ 508 054c 00D82DE9 		.loc 1 193 0
+ 509              		mov	r3, #0
+ 510 0550 04B04CE2 		str	r3, [fp, #-16]
+ 511              		.loc 1 196 0
+ 512 0554 08D04DE2 		mov	r3, #-536870912
+ 513              		add	r3, r3, #114688
+ 192:i2c.c         ****     unsigned int timeout = 0;
+ 514              	
+ 515 0558 0030A0E3 		str	r2, [r3, #0]
+ 516 055c 14300BE5 	.L37:
+ 193:i2c.c         ****     unsigned int returnValue = FALSE;
+ 517              	loc 1 201 0
+ 518 0560 0030A0E3 		ldr	r3, .L44
+ 519 0564 10300BE5 		ldr	r3, [r3, #0]
+ 194:i2c.c         ****  
+ 195:i2c.c         ****     /*--- Issue a start condition ---*/
+ 196:i2c.c         ****     I20CONSET = I2CONSET_STA;	/* Set Start flag */
+ 520              	p	r3, #1
+ 521 0568 0E32A0E3 		bne	.L38
+ 522 056c 073983E2 		.loc 1 203 0
+ 523 0570 2020A0E3 		mov	r3, #1
+ 524 0574 002083E5 		str	r3, [fp, #-16]
+ 525              		.loc 1 204 0
+ 197:i2c.c         ****     
+ 198:i2c.c         ****     /*--- Wait until START transmitted ---*/
+ 199:i2c.c         ****     while( 1 )
+ 200:i2c.c         ****     {
+ 201:i2c.c         **** 	if ( I2CMasterState == I2C_STARTED )
+ 526              	0
+ 527 0578 58309FE5 	.L38:
+ 528 057c 003093E5 		.loc 1 206 0
+ 529 0580 010053E3 		ldr	r2, [fp, #-20]
+ 530 0584 0200001A 		mov	r3, #16777216
+ 202:i2c.c         **** 	{
+ 203:i2c.c         **** 	    returnValue = TRUE;
+ 531              	r3, r3, #2
+ 532 0588 0130A0E3 		cmp	r2, r3
+ 533 058c 10300BE5 		bls	.L41
+ 204:i2c.c         **** 	    break;	
+ 534              	oc 1 208 0
+ 535 0590 0B0000EA 		mov	r3, #0
+ 536              		str	r3, [fp, #-16]
+ 205:i2c.c         **** 	}
+ 206:i2c.c         **** 	if ( timeout >= MAX_TIMEOUT )
+ 537              	oc 1 209 0
+ 538 0594 14201BE5 		b	.L40
+ 539 0598 0134A0E3 	.L41:
+ 540 059c 023043E2 		.loc 1 211 0
+ 541 05a0 030052E1 		ldr	r3, [fp, #-20]
+ 542 05a4 0200009A 		add	r3, r3, #1
+ 207:i2c.c         **** 	{
+ 208:i2c.c         **** 	    returnValue = FALSE;
+ 543              	3, [fp, #-20]
+ 544 05a8 0030A0E3 		.loc 1 212 0
+ 545 05ac 10300BE5 		b	.L37
+ 209:i2c.c         **** 	    break;
+ 546              	0:
+ 547 05b0 030000EA 		.loc 1 213 0
+ 548              		ldr	r3, [fp, #-16]
+ 210:i2c.c         **** 	}
+ 211:i2c.c         **** 	timeout++;
+ 549              	oc 1 214 0
+ 550 05b4 14301BE5 		mov	r0, r3
+ 551 05b8 013083E2 		sub	sp, fp, #12
+ 552 05bc 14300BE5 		ldmfd	sp, {fp, sp, lr}
+ 212:i2c.c         ****     }
+ 553              	lr
+ 554 05c0 ECFFFFEA 	.L45:
+ 555              		.align	2
+ 213:i2c.c         ****     return( returnValue );
+ 556              	4:
+ 557 05c4 10301BE5 		.word	I2CMasterState
+ 214:i2c.c         **** }
+ 558              	FE4:
+ 560 05cc 0CD04BE2 		.align	2
+ 561 05d0 00689DE8 		.global	I2CStop
+ 563              	I2CStop:
+ 564              	.LFB5:
+ 565              		.loc 1 227 0
+ 566 05d8 00000000 		@ Function supports interworking.
+ 567              		@ args = 0, pretend = 0, frame = 0
+ 568              		@ frame_needed = 1, uses_anonymous_args = 0
+ 569              		mov	ip, sp
+ 570              	.LCFI11:
+ 571              		stmfd	sp!, {fp, ip, lr, pc}
+ 572              	.LCFI12:
+ 573              		sub	fp, ip, #4
+ 215:i2c.c         **** 
+ 216:i2c.c         **** /*****************************************************************************
+ 217:i2c.c         **** ** Function name:		I2CStop
+ 218:i2c.c         **** **
+ 219:i2c.c         **** ** Descriptions:		Set the I2C stop condition, if the routine
+ 220:i2c.c         **** **				never exit, it's a fatal bus error.
+ 221:i2c.c         **** **
+ 222:i2c.c         **** ** parameters:			None
+ 223:i2c.c         **** ** Returned value:		true or never return
+ 224:i2c.c         **** ** 
+ 225:i2c.c         **** *****************************************************************************/
+ 226:i2c.c         **** unsigned int I2CStop( void )
+ 227:i2c.c         **** {
+ 574              	 228 0
+ 575              		mov	r3, #-536870912
+ 576              		add	r3, r3, #114688
+ 577              		mov	r2, #16
+ 578 05dc 0DC0A0E1 		str	r2, [r3, #0]
+ 579              		.loc 1 229 0
+ 580 05e0 00D82DE9 		mov	r3, #-536870912
+ 581              		add	r3, r3, #114688
+ 582 05e4 04B04CE2 		add	r3, r3, #24
+ 583              		mov	r2, #8
+ 228:i2c.c         ****     I20CONSET = I2CONSET_STO;      /* Set Stop flag */ 
+ 584              	r3, #0]
+ 585 05e8 0E32A0E3 	.L47:
+ 586 05ec 073983E2 		.loc 1 232 0
+ 587 05f0 1020A0E3 		mov	r3, #-536870912
+ 588 05f4 002083E5 		add	r3, r3, #114688
+ 229:i2c.c         ****     I20CONCLR = I2CONCLR_SIC;  /* Clear SI flag */ 
+ 589              	r3, [r3, #0]
+ 590 05f8 0E32A0E3 		and	r3, r3, #16
+ 591 05fc 073983E2 		cmp	r3, #0
+ 592 0600 183083E2 		bne	.L47
+ 593 0604 0820A0E3 		.loc 1 233 0
+ 594 0608 002083E5 		mov	r3, #1
+ 595              		.loc 1 234 0
+ 230:i2c.c         ****             
+ 231:i2c.c         ****     /*--- Wait for STOP detected ---*/
+ 232:i2c.c         ****     while( I20CONSET & I2CONSET_STO );
+ 596              	, r3
+ 597 060c 0E32A0E3 		sub	sp, fp, #12
+ 598 0610 073983E2 		ldmfd	sp, {fp, sp, lr}
+ 599 0614 003093E5 		bx	lr
+ 600 0618 103003E2 	.LFE5:
+ 602 0620 F9FFFF1A 		.align	2
+ 233:i2c.c         ****     return TRUE;
+ 603              	l	I2CInit
+ 234:i2c.c         **** }
+ 605              	CInit:
+ 606 0628 0300A0E1 	.LFB6:
+ 607 062c 0CD04BE2 		.loc 1 247 0
+ 608 0630 00689DE8 		@ Function supports interworking.
+ 609 0634 1EFF2FE1 		@ args = 0, pretend = 0, frame = 4
+ 610              		@ frame_needed = 1, uses_anonymous_args = 0
+ 611              		mov	ip, sp
+ 612              	.LCFI14:
+ 613              		stmfd	sp!, {fp, ip, lr, pc}
+ 614              	.LCFI15:
+ 615              		sub	fp, ip, #4
+ 616              	.LCFI16:
+ 235:i2c.c         **** 
+ 236:i2c.c         **** /*****************************************************************************
+ 237:i2c.c         **** ** Function name:		I2CInit
+ 238:i2c.c         **** **
+ 239:i2c.c         **** ** Descriptions:		Initialize I2C controller
+ 240:i2c.c         **** **
+ 241:i2c.c         **** ** parameters:			I2c mode is either MASTER or SLAVE
+ 242:i2c.c         **** ** Returned value:		true or false, return false if the I2C
+ 243:i2c.c         **** **				interrupt handler was not installed correctly
+ 244:i2c.c         **** ** 
+ 245:i2c.c         **** *****************************************************************************/
+ 246:i2c.c         **** void I2CInit( unsigned int I2cMode ) 
+ 247:i2c.c         **** {
+ 617              	 #4
+ 618              	.LCFI17:
+ 619              		str	r0, [fp, #-16]
+ 620              		.loc 1 248 0
+ 621 0638 0DC0A0E1 		mov	r2, #-536870904
+ 622              		add	r2, r2, #163840
+ 623 063c 00D82DE9 		mov	r3, #-536870904
+ 624              		add	r3, r3, #163840
+ 625 0640 04B04CE2 		ldr	r3, [r3, #0]
+ 626              		orr	r3, r3, #12
+ 627 0644 04D04DE2 		str	r3, [r2, #0]
+ 628              		.loc 1 249 0
+ 629 0648 10000BE5 		mov	r3, #-536870908
+ 248:i2c.c         ****     IODIR0|= 0x0C;	/* set port 0.2 and port 0.3 to output, high */
+ 630              	#163840
+ 631 064c 8E22A0E3 		mov	r2, #12
+ 632 0650 0A2982E2 		str	r2, [r3, #0]
+ 633 0654 8E32A0E3 		.loc 1 252 0
+ 634 0658 0A3983E2 		mov	r3, #-536870912
+ 635 065c 003093E5 		add	r3, r3, #114688
+ 636 0660 0C3083E3 		add	r3, r3, #24
+ 637 0664 003082E5 		mov	r2, #108
+ 249:i2c.c         ****     IOSET0 = 0x0C;
+ 638              	 [r3, #0]
+ 639 0668 4E32A0E3 		.loc 1 255 0
+ 640 066c 0A3983E2 		mov	r3, #-536870912
+ 641 0670 0C20A0E3 		add	r3, r3, #114688
+ 642 0674 002083E5 		add	r3, r3, #20
+ 250:i2c.c         **** 
+ 251:i2c.c         ****     /*--- Clear flags ---*/
+ 252:i2c.c         ****     I20CONCLR = I2CONCLR_AAC | I2CONCLR_SIC | I2CONCLR_STAC | I2CONCLR_I2ENC;    
+ 643              	r2, #128
+ 644 0678 0E32A0E3 		str	r2, [r3, #0]
+ 645 067c 073983E2 		.loc 1 256 0
+ 646 0680 183083E2 		mov	r3, #-536870912
+ 647 0684 6C20A0E3 		add	r3, r3, #114688
+ 648 0688 002083E5 		add	r3, r3, #16
+ 253:i2c.c         **** 
+ 254:i2c.c         ****     /*--- Reset registers ---*/
+ 255:i2c.c         ****     I20SCLL   = I2SCLL_SCLL;
+ 649              	2, #128
+ 650 068c 0E32A0E3 		str	r2, [r3, #0]
+ 651 0690 073983E2 		.loc 1 257 0
+ 652 0694 143083E2 		sub	sp, fp, #12
+ 653 0698 8020A0E3 		ldmfd	sp, {fp, sp, lr}
+ 654 069c 002083E5 		bx	lr
+ 256:i2c.c         ****     I20SCLH   = I2SCLH_SCLH;
+ 655              	
+ 657 06a4 073983E2 		.align	2
+ 658 06a8 103083E2 		.global	I2CEngine
+ 660 06b0 002083E5 	I2CEngine:
+ 257:i2c.c         **** }
+ 661              	:
+ 662 06b4 0CD04BE2 		.loc 1 277 0
+ 663 06b8 00689DE8 		@ Function supports interworking.
+ 664 06bc 1EFF2FE1 		@ args = 0, pretend = 0, frame = 4
+ 665              		@ frame_needed = 1, uses_anonymous_args = 0
+ 666              		mov	ip, sp
+ 667              	.LCFI18:
+ 668              		stmfd	sp!, {fp, ip, lr, pc}
+ 669              	.LCFI19:
+ 670              		sub	fp, ip, #4
+ 671              	.LCFI20:
+ 258:i2c.c         **** 
+ 259:i2c.c         **** /*****************************************************************************
+ 260:i2c.c         **** ** Function name:		I2CEngine
+ 261:i2c.c         **** **
+ 262:i2c.c         **** ** Descriptions:		The routine to complete a I2C transaction
+ 263:i2c.c         **** **				from start to stop. All the intermitten
+ 264:i2c.c         **** **				steps are handled in the interrupt handler.
+ 265:i2c.c         **** **				Before this routine is called, the read
+ 266:i2c.c         **** **				length, write length, I2C master buffer,
+ 267:i2c.c         **** **				and I2C command fields need to be filled.
+ 268:i2c.c         **** **				see i2cmst.c for more details. 
+ 269:i2c.c         **** **
+ 270:i2c.c         **** ** parameters:			None
+ 271:i2c.c         **** ** Returned value:		true or false, return false only if the
+ 272:i2c.c         **** **				start condition can never be generated and
+ 273:i2c.c         **** **				timed out. 
+ 274:i2c.c         **** ** 
+ 275:i2c.c         **** *****************************************************************************/
+ 276:i2c.c         **** unsigned int I2CEngine( void ) 
+ 277:i2c.c         **** {
+ 672              	, #4
+ 673              	.LCFI21:
+ 674              		.loc 1 278 0
+ 675              		ldr	r2, .L59
+ 676 06c0 0DC0A0E1 		mov	r3, #0
+ 677              		str	r3, [r2, #0]
+ 678 06c4 00D82DE9 		.loc 1 279 0
+ 679              		ldr	r2, .L59+4
+ 680 06c8 04B04CE2 		mov	r3, #0
+ 681              		str	r3, [r2, #0]
+ 682 06cc 04D04DE2 		.loc 1 280 0
+ 683              		ldr	r2, .L59+8
+ 278:i2c.c         ****     I2CMasterState = I2C_IDLE;
+ 684              		str	r3, [r2, #0]
+ 685 06d0 6C209FE5 		.loc 1 281 0
+ 686 06d4 0030A0E3 		bl	I2CStart
+ 687 06d8 003082E5 		mov	r3, r0
+ 279:i2c.c         ****     RdIndex = 0;
+ 688              		r3, #1
+ 689 06dc 64209FE5 		beq	.L53
+ 690 06e0 0030A0E3 		.loc 1 283 0
+ 691 06e4 003082E5 		bl	I2CStop
+ 280:i2c.c         ****     WrIndex = 0;
+ 692              	c 1 284 0
+ 693 06e8 5C209FE5 		mov	r3, #0
+ 694 06ec 0030A0E3 		str	r3, [fp, #-16]
+ 695 06f0 003082E5 		b	.L55
+ 281:i2c.c         ****     if ( I2CStart() != TRUE )
+ 696              	:
+ 697 06f4 FEFFFFEB 		.loc 1 288 0
+ 698 06f8 0030A0E1 		ldr	r3, .L59
+ 699 06fc 010053E3 		ldr	r3, [r3, #0]
+ 700 0700 0300000A 		cmp	r3, #5
+ 282:i2c.c         ****     {
+ 283:i2c.c         **** 		I2CStop();
+ 701              	.L53
+ 702 0704 FEFFFFEB 		.loc 1 290 0
+ 284:i2c.c         **** 	return ( FALSE );
+ 703              	l	I2CStop
+ 704 0708 0030A0E3 		.loc 1 294 0
+ 705 070c 10300BE5 		mov	r3, #1
+ 706 0710 060000EA 		str	r3, [fp, #-16]
+ 707              	.L55:
+ 285:i2c.c         ****     }
+ 286:i2c.c         ****     while ( 1 )
+ 287:i2c.c         ****     {
+ 288:i2c.c         **** 	if ( I2CMasterState == DATA_NACK )
+ 708              	 1 293 0
+ 709 0714 28309FE5 		ldr	r3, [fp, #-16]
+ 710 0718 003093E5 		.loc 1 295 0
+ 711 071c 050053E3 		mov	r0, r3
+ 712 0720 FBFFFF1A 		sub	sp, fp, #12
+ 289:i2c.c         **** 	{
+ 290:i2c.c         **** 	    I2CStop();
+ 713              	d	sp, {fp, sp, lr}
+ 714 0724 FEFFFFEB 		bx	lr
+ 291:i2c.c         **** 	    break;
+ 292:i2c.c         **** 	}
+ 293:i2c.c         ****     }    
+ 294:i2c.c         ****     return ( TRUE );      
+ 715              	60:
+ 716 0728 0130A0E3 		.align	2
+ 717 072c 10300BE5 	.L59:
+ 718              		.word	I2CMasterState
+ 719              		.word	RdIndex
+ 720 0730 10301BE5 		.word	WrIndex
+ 295:i2c.c         **** }
+ 721              	
+ 723 0738 0CD04BE2 		.comm	I2CCmd,4,4
+ 724 073c 00689DE8 		.comm	I2CMode,4,4
+ 725 0740 1EFF2FE1 		.comm	I2CMasterBuffer,32,1
+ 726              		.comm	I2CSlaveBuffer,32,1
+ 727              		.comm	I2CReadLength,4,4
+ 728              		.comm	I2CWriteLength,4,4
+ 729 0744 00000000 		.section	.debug_frame,"",%progbits
+ 730 0748 00000000 	.Lframe0:
+ 731 074c 00000000 		.4byte	.LECIE0-.LSCIE0
+ 732              	.LSCIE0:
+ 733              		.4byte	0xffffffff
+ 734              		.byte	0x1
+ 735              		.ascii	"\000"
+ 736              		.uleb128 0x1
+ 737              		.sleb128 -4
+ 738              		.byte	0xe
+ 739              		.byte	0xc
+ 907              		.byte	0x5c
+DEFINED SYMBOLS
+                            *ABS*:00000000 i2c.c
+C:\Users\ivanm\AppData\Local\Temp/ccWIaaaa.s:15     .bss:00000000 I2CMasterState
+                             .bss:00000000 $d
+C:\Users\ivanm\AppData\Local\Temp/ccWIaaaa.s:21     .bss:00000004 I2CSlaveState
+C:\Users\ivanm\AppData\Local\Temp/ccWIaaaa.s:27     .bss:00000008 I2CCount
+C:\Users\ivanm\AppData\Local\Temp/ccWIaaaa.s:33     .bss:0000000c RdIndex
+C:\Users\ivanm\AppData\Local\Temp/ccWIaaaa.s:39     .bss:00000010 WrIndex
+C:\Users\ivanm\AppData\Local\Temp/ccWIaaaa.s:45     .text:00000000 I2C0MasterHandler
+C:\Users\ivanm\AppData\Local\Temp/ccWIaaaa.s:52     .text:00000000 $a
+C:\Users\ivanm\AppData\Local\Temp/ccWIaaaa.s:73     .text:00000034 $d
+C:\Users\ivanm\AppData\Local\Temp/ccWIaaaa.s:156    .text:00000178 $a
+C:\Users\ivanm\AppData\Local\Temp/ccWIaaaa.s:416    .text:00000480 $d
+                            *COM*:00000020 I2CMasterBuffer
+                            *COM*:00000004 I2CCmd
+                            *COM*:00000004 I2CWriteLength
+                            *COM*:00000004 I2CReadLength
+C:\Users\ivanm\AppData\Local\Temp/ccWIaaaa.s:428    .text:0000049c I2C0_send_motordata
+C:\Users\ivanm\AppData\Local\Temp/ccWIaaaa.s:434    .text:0000049c $a
+C:\Users\ivanm\AppData\Local\Temp/ccWIaaaa.s:670    .text:000006c0 I2CEngine
+C:\Users\ivanm\AppData\Local\Temp/ccWIaaaa.s:489    .text:00000530 $d
+C:\Users\ivanm\AppData\Local\Temp/ccWIaaaa.s:500    .text:00000548 I2CStart
+C:\Users\ivanm\AppData\Local\Temp/ccWIaaaa.s:506    .text:00000548 $a
+C:\Users\ivanm\AppData\Local\Temp/ccWIaaaa.s:566    .text:000005d8 $d
+C:\Users\ivanm\AppData\Local\Temp/ccWIaaaa.s:572    .text:000005dc I2CStop
+C:\Users\ivanm\AppData\Local\Temp/ccWIaaaa.s:578    .text:000005dc $a
+C:\Users\ivanm\AppData\Local\Temp/ccWIaaaa.s:615    .text:00000638 I2CInit
+C:\Users\ivanm\AppData\Local\Temp/ccWIaaaa.s:729    .text:00000744 $d
+                            *COM*:00000004 I2CMode
+                            *COM*:00000020 I2CSlaveBuffer
+
+NO UNDEFINED SYMBOLS
