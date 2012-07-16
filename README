@@ -1,4 +1,7 @@
-Installation:
+-------------------------------------------
+ INSTALLATION
+-------------------------------------------
+
 1. Go to 'lib/atlante/atlante' and type 'make'
 2. Go to 'api' and type 'make'
 
@@ -7,10 +10,25 @@ To build AR.Drone proxy (you should have AR.Drone SDK installed):
 4. Edit 'Makefile' and change the SDK_PATH variable to point to your AR.Drone SDK installation
 
 To build the Pelican proxy:
-3. Go to 'poxies/Pelican/3rdparty' and type 'make'
-4. Go to 'proxies/Pelican/bin' and type 'make'
-5. Update the Pelican high-level board firmware by flashing proxies/Pelican/AutoPilot_HL_SDK/main.hex with the Flash Magic application provided by AscTec
+3. Copy the project to the onboard Pelican Atom board (running Ubuntu)
+4. Go to 'proxies/Pelican/3rdparty' and type 'make'
+5. Go to 'proxies/Pelican/bin' and type 'make'
+6. Update the Pelican high-level board firmware by flashing 'proxies/Pelican/AutoPilot_HL_SDK/main.hex' with the Flash Magic application provided by AscTec
 
 To build the example application:
-3. Set the proxy IP in 'example/sources/main.cpp' defined as DRONE_HOST in line 8 
+3. Set the drone proxy IP in 'example/sources/main.cpp' defined as DRONE_HOST in line 8 
 4. Go to 'example/bin' and type 'make'
+
+------------------------------------------
+HOW TO RUN
+------------------------------------------
+
+For AscTec Pelican:
+1. Run the onboard proxy with './run.sh' (change permissions with 'chmod +x run.sh', if needed)
+
+For Parrot AR.Drone:
+1. Connect the computer where the proxy will run to the AR.Drone adhoc network
+2. Run the AR.Drone proxy at 'proxies/ARDrone/Build/Release/cvgDroneProxy'
+
+After running the specific proxy, go to 'example/bin' and run './cvgDroneBrain'. Make sure that you compiled it with the correct proxy address defined at 'example/sources/main.cpp' as DRONE_HOST 
+
