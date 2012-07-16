@@ -9,6 +9,8 @@ To build AR.Drone proxy (you should have AR.Drone SDK installed):
 To build the Pelican proxy:
 3. Go to 'poxies/Pelican/3rdparty' and type 'make'
 4. Go to 'proxies/Pelican/bin' and type 'make'
+5. Update the Pelican high-level board firmware by flashing proxies/Pelican/AutoPilot_HL_SDK/main.hex with the Flash Magic application provided by AscTec
 
 To build the example application:
-3. Go to 'example/bin' and type 'make'
+3. Set the proxy IP in 'example/sources/main.cpp' defined as DRONE_HOST in line 8 
+4. Go to 'example/bin' and type 'make'

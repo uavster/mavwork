@@ -5,6 +5,8 @@
  *      Author: Ignacio Mellado
  */
 
+#define DRONE_HOST	"127.0.0.1"
+
 #include <ConsoleUI.h>
 #include <stdio.h>
 #include <atlante.h>
@@ -26,7 +28,7 @@ int main(void) {
 
 		myDrone.setAuto(false);
 //		myDrone.setPositioningSource(MyDrone::POSITIONING_VICON);
-		myDrone.open("127.0.0.1", COMMANDER, 1, cvgString("arcaa-vicon-server:801"), cvgString("Nacho-ARDrone2"));
+		myDrone.open(DRONE_HOST, COMMANDER, 1, cvgString("arcaa-vicon-server:801"), cvgString("Nacho-ARDrone2"));
 		myDrone.logDataFrom(MyDrone::ODOMETRY | MyDrone::VIDEO | MyDrone::COMMANDS); // | MyDrone::VICON);
 
 		ui.init();
