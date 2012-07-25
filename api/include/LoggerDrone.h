@@ -95,7 +95,7 @@ public:
 	}
 
 	inline Positioning::Vicon &getVicon() { return vicon; }
-	inline Logs::DataWriter &getDataWritter() { return dataWriter; }
+	inline Logs::DataWriter &getLogDataWritter() { return dataWriter; }
 
 protected:
 	virtual void processVideoFrame(cvg_int cameraId, cvg_ulong timeCode, VideoFormat format, cvg_uint width, cvg_uint height, cvg_char *frameData);
