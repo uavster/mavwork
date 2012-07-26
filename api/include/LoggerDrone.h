@@ -8,8 +8,6 @@
 #ifndef LOGGERDRONE_H_
 #define LOGGERDRONE_H_
 
-#include <cv.h>
-
 #include "Drone.h"
 #include "LogConsumer.h"
 #include "Vicon.h"
