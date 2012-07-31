@@ -2,22 +2,23 @@
  INSTALLATION
 -------------------------------------------
 
-1. Go to 'lib/atlante/atlante' and type 'make'
-2. Go to 'api' and type 'make'
+1. Go to 'lib/atlante/atlante' and run 'make'
+2. Go to 'api' and run 'make'
 
 To build AR.Drone proxy (you should have AR.Drone SDK installed):
 3. Go to 'proxies/ARDrone/Build'
 4. Edit 'Makefile' and change the SDK_PATH variable to point to your AR.Drone SDK installation
+5. Run 'make'
 
 To build the Pelican proxy:
 3. Copy the project to the onboard Pelican Atom board (running Ubuntu)
-4. Go to 'proxies/Pelican/3rdparty' and type 'make'
-5. Go to 'proxies/Pelican/bin' and type 'make'
+4. Go to 'proxies/Pelican/3rdparty/RS-232' and run 'make'
+5. Go to 'proxies/Pelican/bin' and run 'make'
 6. Update the Pelican high-level board firmware by flashing 'proxies/Pelican/AutoPilot_HL_SDK/main.hex' with the Flash Magic application provided by AscTec
 
 To build the example application:
 3. Set the drone proxy IP in 'example/sources/main.cpp' defined as DRONE_HOST in line 8 
-4. Go to 'example/bin' and type 'make'
+4. Go to 'example/bin' and run 'make'
 
 ------------------------------------------
 HOW TO RUN
