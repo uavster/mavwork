@@ -9,6 +9,7 @@
 #include "../include/cvgThread.h"
 
 #define DEFAULT_STOP_TIMEOUT	CVG_LITERAL_INT(5000)
+#define DEFAULT_KILL_TIMEOUT	CVG_LITERAL_INT(5000)
 #define WORKER_LOOP_WAIT	CVG_LITERAL_INT(0)
 
 // By the time it's being written, ETIMEDOUT is not defined on Cygwin. Instead, WSAETIMEDOUT is used.
@@ -76,28 +77,50 @@ void cvgThread::start() {
 	started = true;
 }
 
-void cvgThread::stop() {
+bool cvgThread::kill() {
+#ifndef CVG_WINDOWS
+	if (!started) return false;
+	if (pthread_cancel(handle) != 0) return false;
+	timespec ts;
+	setAbsoluteTimeout(&ts, DEFAULT_KILL_TIMEOUT);
+	void *retval;
+	return pthread_timedjoin_np(handle, &retval, &ts) != ETIMEDOUT;
+#else
+#warning "Atlante does not support kill() in Windows yet"
+#endif
+}
+
+void cvgThread::stop(bool killIfNecessary) {
 	if (!started) return;
 #ifdef CVG_WINDOWS
 	if (GetCurrentThreadId() == threadId)
 #else
 	if (pthread_self() == handle)
 #endif
-		selfStop();	// This will stopped the current thread, but it must be joined from another thread with stop() to free the resources 
+		selfStop();	// This will stop the current thread, but it must be joined from another thread with stop() to free the resources 
 	else {
 		bool error = false;
 #ifdef CVG_WINDOWS
+#warning "Windows version of Atlante does not implement the 'kill if necessary' feature on cvgThread yet"
 		SetEvent(endEvent);
 		error = WaitForSingleObject(endedEvent, stopTimeout) != WAIT_OBJECT_0;
 #else
 		loop = false;
+
 		timespec ts;
 		setAbsoluteTimeout(&ts, stopTimeout);
 		void *retval;
 		error = pthread_timedjoin_np(handle, &retval, &ts) == ETIMEDOUT;
+		if (error && killIfNecessary) {
+			started = !kill();
+			if (!started) throw cvgException("The thread \"" + name + "\" had to be killed to stop!! Please review your code");
+		}
 #endif
 		if (error) {
-			throw cvgException("The thread \"" + name + "\" did not finish in " + stopTimeout + " ms");
+			if (!killIfNecessary)
+				throw cvgException("The thread \"" + name + "\" did not finish in " + stopTimeout + " ms and it might still be running!!");
+			else
+				throw cvgException("The thread \"" + name + "\" could not be stopped or killed!!");
 		}
 		started = false;
 	}
@@ -111,6 +134,7 @@ void *cvgThread::worker(void *p) {
 #define cvg_this	((cvgThread *)p)
 #ifndef CVG_WINDOWS
 	try {
+		pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
 		// sigtimedwait() is not used to catch SIGKILL synchronously because it is not implemented in Cygwin
 		while(cvg_this->loop) {
 			cvg_this->run();
@@ -118,7 +142,9 @@ void *cvgThread::worker(void *p) {
 			usleep(WORKER_LOOP_WAIT * CVG_LITERAL_INT(1000));
 #endif
 		}
+		pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
 	} catch(cvgException e) {
+		pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
 		// Manage the error
 	}
 	cvg_this->started = false;

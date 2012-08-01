@@ -254,8 +254,8 @@ void ConsoleUI::doLoop() {
 }
 
 void ConsoleUI::writeLabel(cvg_uint y, cvg_uint x, const char *label, cvg_int valueLength, cvg_double value) {
-	char str[32];
-	sprintf(str, "%.2f", value);
+	char str[valueLength + 1];
+	snprintf(str, valueLength, "%.2f", value);
 	mvprintw(y, x, "%s: %s", label, str);
 	cvg_int l = strlen(str);
 	cvg_int labelLen = strlen(label);

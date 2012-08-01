@@ -52,7 +52,8 @@ public:
 	inline cvg_uint getStopTimeout() { return stopTimeout; }
 
 	void start();
-	void stop();
+	void stop(bool killIfNecessary = true);
+	bool kill();
 	inline void selfStop() { loop = false; }
 	virtual void run() { }
 

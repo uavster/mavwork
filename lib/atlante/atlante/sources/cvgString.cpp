@@ -30,55 +30,55 @@ cvgString::cvgString(cvg_char n) {
 
 cvgString::cvgString(cvg_uchar n) {
 	cvg_char buff[32];
-	sprintf(buff, "%"CVG_PRINTF_PREFIX_UCHAR"u", n);
+	snprintf(buff, sizeof(buff) - 1, "%"CVG_PRINTF_PREFIX_UCHAR"u", n);
 	(*this) = buff;
 }
 
 cvgString::cvgString(cvg_int n) {
 	cvg_char buff[32];
-	sprintf(buff, "%"CVG_PRINTF_PREFIX_INT"d", n);
+	snprintf(buff, sizeof(buff) - 1, "%"CVG_PRINTF_PREFIX_INT"d", n);
 	(*this) = buff;
 }
 
 cvgString::cvgString(cvg_uint n) {
 	cvg_char buff[32];
-	sprintf(buff, "%"CVG_PRINTF_PREFIX_UINT"u", n);
+	snprintf(buff, sizeof(buff) - 1, "%"CVG_PRINTF_PREFIX_UINT"u", n);
 	(*this) = buff;
 }
 
 cvgString::cvgString(cvg_short n) {
 	cvg_char buff[32];
-	sprintf(buff, "%"CVG_PRINTF_PREFIX_SHORT"d", n);
+	snprintf(buff, sizeof(buff) - 1, "%"CVG_PRINTF_PREFIX_SHORT"d", n);
 	(*this) = buff;
 }
 
 cvgString::cvgString(cvg_ushort n) {
 	cvg_char buff[32];
-	sprintf(buff, "%"CVG_PRINTF_PREFIX_USHORT"u", n);
+	snprintf(buff, sizeof(buff) - 1, "%"CVG_PRINTF_PREFIX_USHORT"u", n);
 	(*this) = buff;
 }
 
 cvgString::cvgString(cvg_long n) {
 	cvg_char buff[32];
-	sprintf(buff, "%"CVG_PRINTF_PREFIX_LONG"d", n);
+	snprintf(buff, sizeof(buff) - 1, "%"CVG_PRINTF_PREFIX_LONG"d", n);
 	(*this) = buff;
 }
 
 cvgString::cvgString(cvg_ulong n) {
 	cvg_char buff[32];
-	sprintf(buff, "%"CVG_PRINTF_PREFIX_ULONG"u", n);
+	snprintf(buff, sizeof(buff) - 1, "%"CVG_PRINTF_PREFIX_ULONG"u", n);
 	(*this) = buff;
 }
 
 cvgString::cvgString(cvg_float n) {
-	cvg_char buff[32];
-	sprintf(buff, "%f", n);
+	cvg_char buff[256];
+	snprintf(buff, sizeof(buff) - 1, "%f", n);
 	(*this) = buff;
 }
 
 cvgString::cvgString(cvg_double n) {
-	cvg_char buff[32];
-	sprintf(buff, "%f", n);
+	cvg_char buff[256];
+	snprintf(buff, sizeof(buff) - 1, "%f", n);
 	(*this) = buff;
 }
 
@@ -241,7 +241,7 @@ cvgString cvgString::replace(cvg_long n, const cvgString &substitute, size_t off
 	size_t occPos = offset;
 	// Format the number as a string to compare with the potential matches
 	char buffer[32];
-	sprintf(buffer, "%"CVG_PRINTF_PREFIX_LONG"d", n);
+	snprintf(buffer, sizeof(buffer) - 1, "%"CVG_PRINTF_PREFIX_LONG"d", n);
 	cvgString strBuffer = buffer;
 	size_t subsLength = substitute.length();
 	const static char mask1[] = "0123456789-";
@@ -280,7 +280,7 @@ cvgString cvgString::replace(cvg_ulong n, const cvgString &substitute, size_t of
 	size_t occPos = offset;
 	// Format the number as a string to compare with the potential matches
 	char buffer[32];
-	sprintf(buffer, "%"CVG_PRINTF_PREFIX_ULONG"u", n);
+	snprintf(buffer, sizeof(buffer) - 1, "%"CVG_PRINTF_PREFIX_ULONG"u", n);
 	cvgString strBuffer = buffer;
 	size_t subsLength = substitute.length();
 	const static char mask[] = "0123456789";
@@ -351,8 +351,8 @@ cvgString cvgString::replace(cvg_double n, const cvgString &substitute, size_t o
 				}
 			}
 			// Format the number with as many decimal places as the detected numeric substring has and compare
-			char buffer[32];
-			sprintf(buffer, (cvgString("%.") + (cvg_long)decimals + "f").c_str(), n);
+			char buffer[256];
+			snprintf(buffer, sizeof(buffer) - 1, (cvgString("%.") + (cvg_long)decimals + "f").c_str(), n);
 			// If they match for the detected precission, replace the numeric substring
 			if (strCopy.substr(occPos, len) == cvgString(buffer)) {
 				strCopy = ((std::string)strCopy).replace(occPos, len, substitute);
