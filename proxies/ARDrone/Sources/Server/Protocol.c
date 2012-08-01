@@ -10,11 +10,11 @@
 #include <string.h>
 
 void float_ntoh(float *f) {
-	*(unsigned int *)&f = ntohl(*(unsigned int *)&f);
+	*(unsigned int *)f = ntohl(*(unsigned int *)f);
 }
 
 void float_hton(float *f) {
-	*(unsigned int *)&f = htonl(*(unsigned int *)&f);
+	*(unsigned int *)f = htonl(*(unsigned int *)f);
 }
 
 void CommandPacket_ntoh(CommandPacket *p) {
