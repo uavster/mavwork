@@ -27,7 +27,8 @@ struct CommandPacket__ {
 	unsigned int		indexH;
 	unsigned int		indexL;		/* If this indexH:indexL is lower than in the last received packet, the current packet is discarded */
 	struct controlData__ {
-		unsigned char	requestedAccessMode;
+		unsigned char	requestedAccessMode : 3;
+		unsigned char	requestedPriority : 5;
 		unsigned int	timeCodeH;
 		unsigned int	timeCodeL;
 		unsigned char	flyingMode;
@@ -67,7 +68,7 @@ struct FeedbackPacket__ {
 
 typedef struct FeedbackPacket__ FeedbackPacket;
 
-typedef enum { RAW_BGR24 = 0, RAW_RGB24 = 1, JPEG = 2 } VideoFormat;
+typedef enum { RAW_BGR24 = 0, RAW_RGB24 = 1, JPEG = 2, RAW_D16 = 3 } VideoFormat;
 
 struct VideoFrameHeader__ {
 	unsigned short	signature;
