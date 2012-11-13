@@ -142,13 +142,13 @@ void ChannelManager::run() {
 
 		// If disconnected, connect configuration channel
 		if (configChannel.getCurrentState() == Channel::DISCONNECTED) {
-/*			try {
+			try {
 				log("Opening configuration channel at %s:%d...", configHost.c_str(), configPort);
 				configChannel.open(configHost, configPort);
 				log("Configuration channel opened.");
 			} catch(cvgException e) {
 				log("Error opening configuration channel. Cause: %s", e.getMessage().c_str());
-			}*/
+			}
 		}
 
 		// If disconnected, connect control channel
