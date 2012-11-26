@@ -2,34 +2,36 @@
  INSTALLATION
 -------------------------------------------
 
-1. Go to 'lib/atlante/atlante' and run 'make'
-2. Go to 'api' and run 'make'
+1. Go to '{Your_MAVwork_directory}/lib/atlante/atlante' and run 'make'
+2. Go to '{Your_MAVwork_directory}/api' and run 'make'
 
-To build AR.Drone proxy (you should have AR.Drone SDK installed):
-3. Go to 'proxies/ARDrone/Build'
-4. Edit 'Makefile' and change the SDK_PATH variable to point to your AR.Drone SDK installation
-5. Run 'make'
+To build AR.Drone 1 proxy (It does not work with AR.Drone 2 yet. We're working on it):
+3. Make sure you have the AR.Drone SDK installed. Otherwise, go to https://projects.ardrone.org and install it.
+4. Go to '{Your_MAVwork_directory}/proxies/ARDrone/Build'
+5. Edit 'Makefile' and change the SDK_PATH variable to point to your AR.Drone SDK installation directory
+6. Run 'make'
+Note: If you get an ffmpeg-related error like "make[5]: *** [../../Soft/Build/targets_versions/ardrone_lib_PROD_MODE_ffmpeg_Intel_Linux_3.2.0-33-generic_GNU_Linux_gcc_/ardrone_tool/Video/video_stage_ffmpeg_recorder.o] Error 1", edit {Your_ARDroneSDK_directory}/ARDroneLib/Soft/Build/custom.makefile and change "FFMPEG_RECORDING_SUPPORT = yes" for "FFMPEG_RECORDING_SUPPORT = no", then recompile the proxy by running 'make clean all' at 'proxies/ARDrone/Build'.
 
 To build the Pelican proxy:
 3. Copy the project to the onboard Pelican Atom board (running Ubuntu)
-4. Go to 'proxies/Pelican/3rdparty/RS-232' and run 'make'
-5. Go to 'proxies/Pelican/bin' and run 'make'
-6. Update the Pelican high-level board firmware by flashing 'proxies/Pelican/AutoPilot_HL_SDK/main.hex' with the Flash Magic application provided by AscTec
+4. Go to '{Your_MAVwork_directory}/proxies/Pelican/3rdparty/RS-232' and run 'make'
+5. Go to '{Your_MAVwork_directory}/proxies/Pelican/bin' and run 'make'
+6. Update the Pelican high-level board firmware by flashing '{Your_MAVwork_directory}/proxies/Pelican/AutoPilot_HL_SDK/main.hex' with the Flash Magic application provided by AscTec
 
 To build the example application:
-3. Set the drone proxy IP in 'example/sources/main.cpp' defined as DRONE_HOST in line 8 
-4. Go to 'example/bin' and run 'make'
+3. Set the drone proxy IP in '{Your_MAVwork_directory}/example/sources/main.cpp' defined as DRONE_HOST in line 8 
+4. Go to '{Your_MAVwork_directory}/example/bin' and run 'make'
 
 ------------------------------------------
 HOW TO RUN
 ------------------------------------------
 
 For AscTec Pelican:
-1. Run the onboard proxy with './run.sh' (change permissions with 'chmod +x run.sh', if needed)
+1. Run the proxy onboard the Pelican with './run.sh' from '{Your_MAVwork_directory}/proxies/Pelican/bin/' (change permissions with 'chmod +x run.sh' if needed)
 
 For Parrot AR.Drone:
 1. Connect the computer where the proxy will run to the AR.Drone adhoc network
 2. Run the AR.Drone proxy at 'proxies/ARDrone/Build/Release/cvgDroneProxy'
 
-After running the specific proxy, go to 'example/bin' and run './cvgDroneBrain'. Make sure that you compiled it with the correct proxy address defined at 'example/sources/main.cpp' as DRONE_HOST 
+After running the specific proxy, go to '{Your_MAVwork_directory}/example/bin' and run './cvgDroneBrain'. Make sure that you compiled it with the correct proxy address defined at 'example/sources/main.cpp' as DRONE_HOST.
 

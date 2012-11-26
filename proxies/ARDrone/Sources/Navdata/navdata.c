@@ -111,7 +111,7 @@ inline C_RESULT demo_navdata_client_process( const navdata_unpacked_t* const nav
 		feedbackPacket.feedbackData.roll = nd->phi / 1000.0f;
 		feedbackPacket.feedbackData.pitch = nd->theta / 1000.0f;
 		feedbackPacket.feedbackData.yaw = nd->psi / 1000.0f;
-		feedbackPacket.feedbackData.altitude = nd->altitude / 1000.0f;
+		feedbackPacket.feedbackData.altitude = (nd->altitude < 0) ? (nd->altitude / 1000.0f) : (-nd->altitude / 1000.0f);
 		feedbackPacket.feedbackData.speedX = nd->vx / 1000.0f;
 		feedbackPacket.feedbackData.speedY = nd->vy / 1000.0f;
 		feedbackPacket.feedbackData.speedYaw = nd->vz / 1000.0f;
@@ -196,9 +196,9 @@ DEFINE_THREAD_ROUTINE(feedbackClient, data) {
 			if (!newPacket) {
 				struct timeval tv;
 				gettimeofday(&tv, NULL);
-				//uint64_t timeCode = (uint64_t)tv.tv_sec * 1e6 + (uint64_t)tv.tv_usec;
-				feedbackPacket.feedbackData.timeCodeH = 0; //htonl((unsigned int)(timeCode >> 32));
-				feedbackPacket.feedbackData.timeCodeL = 0; //htonl((unsigned int)(timeCode & 0xFFFFFFFF));
+				uint64_t timeCode = (uint64_t)tv.tv_sec * 1e6 + (uint64_t)tv.tv_usec;
+				feedbackPacket.feedbackData.timeCodeH = htonl((unsigned int)(timeCode >> 32));
+				feedbackPacket.feedbackData.timeCodeL = htonl((unsigned int)(timeCode & 0xFFFFFFFF));
 			}
 			/* Copy data to end using feedbackPacket as soon as possible */
 			memcpy(&tmpPacket, &feedbackPacket, sizeof(FeedbackPacket));
