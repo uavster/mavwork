@@ -45,7 +45,7 @@ In the MAVwork system, your application links to a library that contains the API
 WHAT IF MY DRONE IS NOT SUPPORTED?
 -------------------------------------------
 
-At the drone side, there is a component called "proxy" that communicates with the applications and deals with the drone's hardware. If the drone does not offer the AR.Drone functionalities natively -like speed estimation or automatic take-off, land and hover-, they are implemented in the proxy on software. To support a new drone, an already existing proxy can be easily adapted by rewriting the module that communicates with the autopilot and configuring some parameters. If this is your case and need some help, you can mail me to ignacio (dot) mellado (at) gmail.com
+At the drone side, there is a component called "proxy" that communicates with the applications and deals with the drone's hardware. If the drone does not offer the AR.Drone functionalities natively -like speed estimation or automatic take-off, land and hover-, they are implemented in the proxy on software. To support a new drone, an already existing proxy can be easily adapted by rewriting the module that communicates with the autopilot and configuring some parameters. If this is your case and need some help, please check the contact information below.
 
 -------------------------------------------
 PROJECTS THAT USE MAVWORK
