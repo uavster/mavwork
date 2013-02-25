@@ -1,4 +1,12 @@
 -------------------------------------------
+SAFETY WARNING AND DISCLAIMER
+-------------------------------------------
+
+You are using this software at your onw risk. The authors do not accept any responsibility for personal injuries and/or property damage.
+
+Some drones supported by this framework ARE NOT TOYS. Even operation by expert users might cause SERIOUS INJURIES to people around. So, please consider flying in a properly screened or isolated flight area.
+
+-------------------------------------------
 WHAT IS MAVWORK?
 -------------------------------------------
 
@@ -8,17 +16,44 @@ MAVwork is a framework for visual control of Micro Aerial Vehicles (MAV). It def
 - Ascending Technologies Pelican
 - UAS Technologies LinkQuad
 
-Plainly speaking, MAVwork transforms any drone into an AR.Drone. It implements autonomous TAKE-OFF, HOVER and LAND, besides the normal flight mode, which allows you to control the drone with yaw, pitch, roll and altitude rate commands. If a drone natively supports this functionality, MAVwork acts just like a gateway. Otherwise, some hardware modifications are needed to make the drone framework-compliant.
+Plainly speaking, MAVwork transforms any drone into an AR.Drone on steroids, featuring:
+
+- Autonomous TAKE-OFF, HOVER and LAND*
+- NORMAL flight mode with yaw, pitch, roll and altitude rate commands
+- Shared access to a single drone from multiple applications
+- Access from every application to multiple drones
+- Two access modes (COMMANDER and LISTENER) with priority system for multiple COMMANDERS.
+
+With MAVwork, your control application is able to:
+
+- Send commands: flight mode, yaw, pitch, roll and altitude rate
+- Get notified every time new navigation feedback is available: yaw, pitch, roll, altitude, forward velocity, lateral velocity and yaw rate
+- Get notified every time a new frame is received from a camera or depth sensor
+- Automatically record logs from every information source
+- Interface with a Vicon system
+- Get notified on error conditions: the connection with the proxy is lost, the proxy cannot connect with the autopilot
+
+(*) If a drone does not natively support the autonomous modes, some hardware modifications are needed.
 
 -------------------------------------------
 HOW DOES IT WORK?
 -------------------------------------------
-In the MAVwork system, your application links to a library that contains the API. The API then communicates with every drone in the network in a transparent way. It means that your application does not need to care about communications, drone specifics or basic operations like: take-off, hover or land. From an application's point of view, all drones are equal. The only thing you need to know is the drone's IP address.
+
+In the MAVwork system, your application links to a library that contains the API. The API then communicates with every drone in the network in a transparent way. It means that your application does not need to care about communications, drone specifics or basic operations like: take-off, hover or land. From an application's point of view, all drones are equal. The only thing it needs to know is the drone's IP address.
 
 -------------------------------------------
-WHAT IF MY DRONE IS NOT SUPPORTED
+WHAT IF MY DRONE IS NOT SUPPORTED?
 -------------------------------------------
+
 At the drone side, there is a component called "proxy" that communicates with the applications and deals with the drone's hardware. If the drone does not offer the AR.Drone functionalities natively -like speed estimation or automatic take-off, land and hover-, they are implemented in the proxy on software. To support a new drone, an already existing proxy can be easily adapted by rewriting the module that communicates with the autopilot and configuring some parameters. If this is your case and need some help, you can mail me to ignacio (dot) mellado (at) gmail.com
+
+-------------------------------------------
+PROJECTS THAT USE MAVWORK
+-------------------------------------------
+
+As far as I know, these are the projects that officially use MAVwork:
+
+- Flexible Multirotor Controller by Jesus Pestana: https://github.com/jespestana/MultirotorController4mavwork
 
 -------------------------------------------
  INSTALLATION
@@ -68,4 +103,12 @@ For LinkQuad:
 After running the specific proxy, your app can run an interact with the drone from any node of the network, provided that it can reach the proxy IP.
 
 To run an example app, go to '{Your_MAVwork_directory}/example/bin' and run './cvgDroneBrain'. Make sure that you compiled it with the correct proxy address, defined at 'example/sources/main.cpp' as DRONE_HOST.
+
+------------------------------------------
+CONTACT
+------------------------------------------
+
+Email: ignacio (dot) mellado (at) gmail.com
+Twitter: @uavster
+LinkedIn: http://www.linkedin.com/in/ignaciomellado
 
