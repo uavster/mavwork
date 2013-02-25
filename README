@@ -18,8 +18,8 @@ MAVwork is a framework for visual control of Micro Aerial Vehicles (MAV). It def
 
 Plainly speaking, MAVwork transforms any drone into an AR.Drone on steroids, featuring:
 
-- Autonomous TAKE-OFF, HOVER and LAND*
-- NORMAL flight mode with yaw, pitch, roll and altitude rate commands
+- Autonomous take-off, hover and land*
+- Normal flight mode with yaw, pitch, roll and altitude rate commands
 - Shared access to a single drone from multiple applications
 - Access from every application to multiple drones
 - Two access modes (COMMANDER and LISTENER) with priority system for multiple COMMANDERS.
