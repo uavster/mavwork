@@ -64,7 +64,7 @@ struct StateInfo__ {
 	float			speedX;
 	float			speedY;
 	float			speedYaw;
-	float			userData[8];
+	//float			userData[8];
 
 	void hton() {
 		Comm::Presentation::hton(&timeCodeH); Comm::Presentation::hton(&timeCodeL);

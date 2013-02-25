@@ -248,9 +248,9 @@ void LinkquadAutopilot::controlMCUCallback(void *data, void *userData) {
 	Vector3 visualSpeed = o->speedEstimator.getVisualSpeedInPseudoWorldFrame(&visualIsValid);
 
 	// TODO: remove this when tested
-	i->userData[0] = visualIsValid ? visualSpeed.x : 1e6;
+/*	i->userData[0] = visualIsValid ? visualSpeed.x : 1e6;
 	i->userData[1] = visualIsValid ? visualSpeed.y : 1e6;
-	i->userData[2] = o->curThrust;
+	i->userData[2] = o->curThrust;*/
 	// TODO: -----------------------
 
 	if (o->controllerThreadMutex.lock()) {
