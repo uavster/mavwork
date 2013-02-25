@@ -12,9 +12,9 @@ WHAT IS MAVWORK?
 
 MAVwork is a framework for visual control of Micro Aerial Vehicles (MAV). It defines a C++ API from which your application can interact with multiple drones of different types in a common way. Currently, MAVwork supports the following drones:
 
-- Parrot AR.Drone (we are working on AR.Drone2 support)
-- Ascending Technologies Pelican
-- UAS Technologies LinkQuad
+- AR.Drone by Parrot (http://ardrone2.parrot.com) (We are working on AR.Drone 2.0 support)
+- Pelican by Ascending Technologies (http://www.asctec.de)
+- LinkQuad by UAS Technologies Sweden AB (http://www.uastech.com)
 
 Plainly speaking, MAVwork transforms any drone into an AR.Drone on steroids, featuring:
 
