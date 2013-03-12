@@ -1,15 +1,11 @@
--------------------------------------------
 SAFETY WARNING AND DISCLAIMER
--------------------------------------------
-
+=============================
 You are using this software at your onw risk. The authors do not accept any responsibility for personal injuries and/or property damage.
 
 Some drones supported by this framework ARE NOT TOYS. Even operation by expert users might cause SERIOUS INJURIES to people around. So, please consider flying in a properly screened or isolated flight area.
 
--------------------------------------------
 WHAT IS MAVWORK?
--------------------------------------------
-
+================
 MAVwork is a framework for visual control of Micro Aerial Vehicles (MAV). It defines a C++ API from which your application can interact with multiple drones of different types in a common way. Currently, MAVwork supports the following drones:
 
 - AR.Drone by Parrot (http://ardrone2.parrot.com) (We are working on AR.Drone 2.0 support). Sample video: http://vimeo.com/61373127
@@ -37,79 +33,79 @@ Check the following book chapter for more information: http://link.springer.com/
 
 (*) If a drone does not natively support the autonomous modes, some hardware modifications are needed.
 
--------------------------------------------
 HOW DOES IT WORK?
--------------------------------------------
-
+=================
 In the MAVwork system, your application links to a library that contains the API. The API then communicates with every drone in the network in a transparent way. It means that your application does not need to care about communications, drone specifics or basic operations like: take-off, hover or land. From an application's point of view, all drones are equal. The only thing it needs to know is the drone's IP address.
 
--------------------------------------------
 WHAT IF MY DRONE IS NOT SUPPORTED?
--------------------------------------------
-
+==================================
 At the drone side, there is a component called "proxy" that communicates with the applications and deals with the drone's hardware. If the drone does not offer the AR.Drone functionalities natively -like speed estimation or automatic take-off, land and hover-, they are implemented in the proxy on software. To support a new drone, an already existing proxy can be easily adapted by rewriting the module that communicates with the autopilot and configuring some parameters. If this is your case and need some help, please check the contact information below.
 
--------------------------------------------
 PROJECTS THAT USE MAVWORK
--------------------------------------------
-
+=========================
 As far as I know, these are the projects that officially use MAVwork:
 
 - Flexible Multirotor Controller by Jesus Pestana: https://github.com/jespestana/MultirotorController4mavwork
 
--------------------------------------------
- INSTALLATION
--------------------------------------------
-
+INSTALLATION
+============
 1. Go to '{Your_MAVwork_directory}/lib/atlante/atlante' and run 'make'
 2. Go to '{Your_MAVwork_directory}/api' and run 'make'
 
-To build AR.Drone 1 proxy (It does not work with AR.Drone 2 yet. We're working on it):
+Parrot AR.Drone
+---------------
+This is how to build AR.Drone 1 proxy (It does not work with AR.Drone 2 yet. We're working on it):
 3. Make sure you have the AR.Drone SDK installed. Otherwise, go to https://projects.ardrone.org and install it.
 4. Go to '{Your_MAVwork_directory}/proxies/ARDrone/Build'
 5. Edit 'Makefile' and change the SDK_PATH variable to point to your AR.Drone SDK installation directory
 6. Run 'make'
 Note: If you get an ffmpeg-related error like "make[5]: *** [../../Soft/Build/targets_versions/ardrone_lib_PROD_MODE_ffmpeg_Intel_Linux_3.2.0-33-generic_GNU_Linux_gcc_/ardrone_tool/Video/video_stage_ffmpeg_recorder.o] Error 1", edit {Your_ARDroneSDK_directory}/ARDroneLib/Soft/Build/custom.makefile and change "FFMPEG_RECORDING_SUPPORT = yes" for "FFMPEG_RECORDING_SUPPORT = no", then recompile the proxy by running 'make clean all' at 'proxies/ARDrone/Build'.
 
-To build the Pelican proxy:
+AscTec Pelican
+--------------
+This is how to build the AscTec Pelican proxy:
 3. Copy the project to the onboard Pelican Atom board (running Ubuntu)
 4. Go to '{Your_MAVwork_directory}/proxies/Pelican/3rdparty/RS-232' and run 'make'
 5. Go to '{Your_MAVwork_directory}/proxies/Pelican/bin' and run 'make'
 6. Update the Pelican high-level board firmware by flashing '{Your_MAVwork_directory}/proxies/Pelican/AutoPilot_HL_SDK/main.hex' with the Flash Magic application provided by AscTec
 
-To build the LinkQuad proxy:
+UAS Technologies LinkQuad
+-------------------------
+This is how to build the LinkQuad proxy:
 3. Copy the project to the onboard LinkQuad Gumstix board (running Ubuntu)
 4. Go to '{Your_MAVwork_directory}/proxies/LinkQuad/bin' and run 'make'
 5. In LinkGS, load the file '{Your_MAVwork_directory}/proxies/LinkQuad/setup/mavwork_on_linkquad.xml' and write the configuration to the onboard flash memory
 
-To build the example application:
+Sample application
+------------------
+This is how to build the sample application:
 3. Set the drone proxy IP in '{Your_MAVwork_directory}/example/sources/main.cpp' defined as DRONE_HOST in line 8 
 4. Go to '{Your_MAVwork_directory}/example/bin' and run 'make'
 
-------------------------------------------
 HOW TO RUN
-------------------------------------------
-
-For AscTec Pelican:
+==========
+First run a proxy for your MAV
+------------------------------
+### AscTec Pelican
 1. Connect your wifi to the Pelican adhoc network and login with ssh
 2. Run the proxy onboard the Pelican with './run.sh' from '{Your_MAVwork_directory}/proxies/Pelican/bin/' (change permissions with 'chmod +x run.sh' if needed)
 
-For Parrot AR.Drone:
+### Parrot AR.Drone
 1. Connect the computer where the proxy will run to the AR.Drone adhoc network
 2. Run the AR.Drone proxy at 'proxies/ARDrone/Build/Release/cvgDroneProxy'
 
-For LinkQuad:
+### UAS Technologies LinkQuad
 1. Connect your wifi to the Pelican adhoc network and login with ssh
 2. Run the proxy onboard the LinkQuad with './cvgLinkquadProxy' at '{Your_MAVwork_directory}/proxies/LinkQuad/bin/'
 
+Then run your application
+-------------------------
 After running the specific proxy, your app can run an interact with the drone from any node of the network, provided that it can reach the proxy IP.
 
 To run an example app, go to '{Your_MAVwork_directory}/example/bin' and run './cvgDroneBrain'. Make sure that you compiled it with the correct proxy address, defined at 'example/sources/main.cpp' as DRONE_HOST.
 
-------------------------------------------
 CONTACT
-------------------------------------------
-
+=======
 Email: ignacio (dot) mellado (at) gmail.com
 Twitter: @uavster
 LinkedIn: http://www.linkedin.com/in/ignaciomellado
