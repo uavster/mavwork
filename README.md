@@ -88,21 +88,21 @@ This is how to build the sample application:
 ### Setting your build from scratch
 If you prefer to set your makefile from scratch, please take into account the following tips:
 
-### Headers
-Your application must include the following headers:
-#### MAVwork headers
+a) Your application must include the following headers:
+
+*MAVwork headers*
 Add "-I{Your_MAVwork_directory}/api -I{Your_MAVwork_directory}/lib/atlante/atlante" to your compiler flags
 
-### Libraries
-Your application must link to the following libraries:
-#### MAVwork libraries
+b) Your application must link to the following libraries:
+
+*MAVwork libraries*
 Add "-L{Your_MAVwork_directory}/api/lib/gcc -lcvgdroneclient" to your linker flags
 Add "-L{Your_MAVwork_directory}/lib/atlante/atlante/lib/gcc -latlante" to your linker flags
 
-#### Third-party libraries
+*Third-party libraries*
 Add "-L{Your_Vicon_library_location} -lViconDataStreamSDK_CPP" to your linker flags
 
-#### System libraries
+*System libraries*
 Add "-L/usr/lib -lc -lpthread" to your linker flags
 
 HOW TO RUN
