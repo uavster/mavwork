@@ -133,7 +133,6 @@ To run an example app, go to '{Your_MAVwork_directory}/example/bin' and run './c
 
 CONTACT
 =======
-Email: ignacio (dot) mellado (at) gmail.com
-Twitter: @uavster
-LinkedIn: http://www.linkedin.com/in/ignaciomellado
-
+- Email: ignacio (dot) mellado (at) gmail.com
+- Twitter: @uavster
+- LinkedIn: http://www.linkedin.com/in/ignaciomellado
