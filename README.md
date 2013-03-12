@@ -49,11 +49,14 @@ As far as I know, these are the projects that officially use MAVwork:
 
 INSTALLATION
 ============
+First, build the API libraries
+-----------------------------
 1. Go to '{Your_MAVwork_directory}/lib/atlante/atlante' and run 'make'
 2. Go to '{Your_MAVwork_directory}/api' and run 'make'
 
-Parrot AR.Drone
----------------
+Second, build the proxy for your drone
+-------------------------------------
+### Parrot AR.Drone
 This is how to build AR.Drone 1 proxy (It does not work with AR.Drone 2 yet. We're working on it):
 3. Make sure you have the AR.Drone SDK installed. Otherwise, go to https://projects.ardrone.org and install it.
 4. Go to '{Your_MAVwork_directory}/proxies/ARDrone/Build'
@@ -61,26 +64,46 @@ This is how to build AR.Drone 1 proxy (It does not work with AR.Drone 2 yet. We'
 6. Run 'make'
 Note: If you get an ffmpeg-related error like "make[5]: *** [../../Soft/Build/targets_versions/ardrone_lib_PROD_MODE_ffmpeg_Intel_Linux_3.2.0-33-generic_GNU_Linux_gcc_/ardrone_tool/Video/video_stage_ffmpeg_recorder.o] Error 1", edit {Your_ARDroneSDK_directory}/ARDroneLib/Soft/Build/custom.makefile and change "FFMPEG_RECORDING_SUPPORT = yes" for "FFMPEG_RECORDING_SUPPORT = no", then recompile the proxy by running 'make clean all' at 'proxies/ARDrone/Build'.
 
-AscTec Pelican
---------------
+### AscTec Pelican
 This is how to build the AscTec Pelican proxy:
 3. Copy the project to the onboard Pelican Atom board (running Ubuntu)
 4. Go to '{Your_MAVwork_directory}/proxies/Pelican/3rdparty/RS-232' and run 'make'
 5. Go to '{Your_MAVwork_directory}/proxies/Pelican/bin' and run 'make'
 6. Update the Pelican high-level board firmware by flashing '{Your_MAVwork_directory}/proxies/Pelican/AutoPilot_HL_SDK/main.hex' with the Flash Magic application provided by AscTec
 
-UAS Technologies LinkQuad
--------------------------
+### UAS Technologies LinkQuad
 This is how to build the LinkQuad proxy:
 3. Copy the project to the onboard LinkQuad Gumstix board (running Ubuntu)
 4. Go to '{Your_MAVwork_directory}/proxies/LinkQuad/bin' and run 'make'
 5. In LinkGS, load the file '{Your_MAVwork_directory}/proxies/LinkQuad/setup/mavwork_on_linkquad.xml' and write the configuration to the onboard flash memory
 
-Sample application
-------------------
+Third, build your application
+-----------------------------
+### Using the sample makefile as template
+You can use the sample application makefile as a template for your project makefile. Please, check the customizable parameters section of the sample makefile to see what to modify.
 This is how to build the sample application:
 3. Set the drone proxy IP in '{Your_MAVwork_directory}/example/sources/main.cpp' defined as DRONE_HOST in line 8 
 4. Go to '{Your_MAVwork_directory}/example/bin' and run 'make'
+
+### Setting your build from scratch
+If you prefer to set your makefile from scratch, please take into account the following tips:
+
+### Headers
+Your application must include the following headers:
+#### MAVwork headers
+Add "-I{Your_MAVwork_directory}/api -I{Your_MAVwork_directory}/lib/atlante/atlante" to your compiler flags
+
+### Libraries
+Your application must link to the following libraries:
+#### MAVwork libraries
+Add "-L{Your_MAVwork_directory}/api/lib/gcc -lcvgdroneclient" to your linker flags
+Add "-L{Your_MAVwork_directory}/lib/atlante/atlante/lib/gcc -latlante" to your linker flags
+
+#### Third-party libraries
+Add "-L{Your_Vicon_library_location} -lViconDataStreamSDK_CPP" to your linker flags
+
+#### System libraries
+Add "-L/usr/lib -lc -lpthread" to your linker flags
 
 HOW TO RUN
 ==========
