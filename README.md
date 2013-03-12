@@ -88,13 +88,13 @@ This is how to build the sample application:
 ### Setting your build from scratch
 If you prefer to set your makefile from scratch, please take into account the following tips:
 
-a) Your application must include the following headers:
+**a) Your application must include the following headers:**
 
 *MAVwork headers*
 
 Add "-I{Your_MAVwork_directory}/api -I{Your_MAVwork_directory}/lib/atlante/atlante" to your compiler flags
 
-b) Your application must link to the following libraries:
+**b) Your application must link to the following libraries:**
 
 *MAVwork libraries*
 
