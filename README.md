@@ -58,6 +58,7 @@ Second, build the proxy for your drone
 -------------------------------------
 ### Parrot AR.Drone
 This is how to build AR.Drone 1 proxy (It does not work with AR.Drone 2 yet. We're working on it):
+
 3. Make sure you have the AR.Drone SDK installed. Otherwise, go to https://projects.ardrone.org and install it.
 4. Go to '{Your_MAVwork_directory}/proxies/ARDrone/Build'
 5. Edit 'Makefile' and change the SDK_PATH variable to point to your AR.Drone SDK installation directory
@@ -66,6 +67,7 @@ Note: If you get an ffmpeg-related error like "make[5]: *** [../../Soft/Build/ta
 
 ### AscTec Pelican
 This is how to build the AscTec Pelican proxy:
+
 3. Copy the project to the onboard Pelican Atom board (running Ubuntu)
 4. Go to '{Your_MAVwork_directory}/proxies/Pelican/3rdparty/RS-232' and run 'make'
 5. Go to '{Your_MAVwork_directory}/proxies/Pelican/bin' and run 'make'
@@ -73,6 +75,7 @@ This is how to build the AscTec Pelican proxy:
 
 ### UAS Technologies LinkQuad
 This is how to build the LinkQuad proxy:
+
 3. Copy the project to the onboard LinkQuad Gumstix board (running Ubuntu)
 4. Go to '{Your_MAVwork_directory}/proxies/LinkQuad/bin' and run 'make'
 5. In LinkGS, load the file '{Your_MAVwork_directory}/proxies/LinkQuad/setup/mavwork_on_linkquad.xml' and write the configuration to the onboard flash memory
@@ -82,6 +85,7 @@ Third, build your application
 ### Using the sample makefile as template
 You can use the sample application makefile as a template for your project makefile. Please, check the customizable parameters section of the sample makefile to see what to modify.
 This is how to build the sample application:
+
 3. Set the drone proxy IP in '{Your_MAVwork_directory}/example/sources/main.cpp' defined as DRONE_HOST in line 8 
 4. Go to '{Your_MAVwork_directory}/example/bin' and run 'make'
 
