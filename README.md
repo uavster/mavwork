@@ -111,7 +111,7 @@ Add "-L/usr/lib -lc -lpthread" to your linker flags
 
 HOW TO RUN
 ==========
-First run a proxy for your MAV
+First, run a proxy for your MAV
 ------------------------------
 ### AscTec Pelican
 1. Connect your wifi to the Pelican adhoc network and login with ssh
@@ -125,7 +125,7 @@ First run a proxy for your MAV
 1. Connect your wifi to the Pelican adhoc network and login with ssh
 2. Run the proxy onboard the LinkQuad with './cvgLinkquadProxy' at '{Your_MAVwork_directory}/proxies/LinkQuad/bin/'
 
-Then run your application
+Then, run your application
 -------------------------
 After running the specific proxy, your app can run an interact with the drone from any node of the network, provided that it can reach the proxy IP.
 
