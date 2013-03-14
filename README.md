@@ -8,7 +8,7 @@ WHAT IS MAVWORK?
 ================
 MAVwork is a framework for visual control of Micro Aerial Vehicles (MAV). It defines a C++ API from which your application can interact with multiple drones of different types in a common way. Currently, MAVwork supports the following drones:
 
-- AR.Drone by Parrot (http://ardrone2.parrot.com) (We are working on AR.Drone 2.0 support). Sample video: http://vimeo.com/61373127
+- AR.Drone by Parrot (http://ardrone2.parrot.com) (Not yet tested with AR.Drone 2.0). Sample video: http://vimeo.com/61373127
 - Pelican by Ascending Technologies (http://www.asctec.de). Sample video: http://vimeo.com/61370169
 - LinkQuad by UAS Technologies Sweden AB (http://www.uastech.com). Sample video: http://vimeo.com/61558982
 
@@ -57,7 +57,7 @@ First, build the API libraries
 Second, build the proxy for your drone
 -------------------------------------
 ### Parrot AR.Drone
-This is how to build AR.Drone 1 proxy (It does not work with AR.Drone 2 yet. We're working on it):
+This is how to build the AR.Drone proxy (Only tested with AR.Drone, not with AR.Drone 2.0):
 
 3. Make sure you have the AR.Drone SDK installed. Otherwise, go to https://projects.ardrone.org and install it.
 4. Go to '{Your_MAVwork_directory}/proxies/ARDrone/Build'
