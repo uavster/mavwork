@@ -6,7 +6,7 @@ Some drones supported by this framework ARE NOT TOYS. Even operation by expert u
 
 WHAT IS MAVWORK?
 ================
-MAVwork is a framework for visual control of Micro Aerial Vehicles (MAV). It defines a C++ API from which your application can interact with multiple drones of different types in a common way. Currently, MAVwork supports the following drones:
+MAVwork is a framework for visual control of Micro Aerial Vehicles (MAV). It defines a C++ API from which your application can interact with multiple drones of different types in a common way. Currently, MAVwork runs on Linux and it supports the following drones:
 
 - AR.Drone by Parrot (http://ardrone2.parrot.com) (Not yet tested with AR.Drone 2.0). Sample video: http://vimeo.com/61373127
 - Pelican by Ascending Technologies (http://www.asctec.de). Sample video: http://vimeo.com/61370169
