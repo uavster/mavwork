@@ -139,6 +139,5 @@ CONTACT
 
 CONTRIBUTORS
 ============
-[Ignacio M. Bataller](https://github.com/uavster): Original project creator and maintainer
-[Jesús Pestana](https://github.com/jespestana): Bug reports, suggestions and backup pilot during test flights
-
+[Ignacio M. Bataller](https://github.com/uavster): Original project creator and maintainer  
+[Jesús Pestana](https://github.com/jespestana): Bug reports, suggestions and backup pilot during test flights  
