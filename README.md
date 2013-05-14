@@ -1,6 +1,6 @@
 SAFETY WARNING AND DISCLAIMER
 =============================
-You are using this software at your onw risk. The authors do not accept any responsibility for personal injuries and/or property damage.
+You are using this software at your onw risk. The authors decline any responsibility for personal injuries and/or property damage.
 
 Some drones supported by this framework ARE NOT TOYS. Even operation by expert users might cause SERIOUS INJURIES to people around. So, please consider flying in a properly screened or isolated flight area.
 
